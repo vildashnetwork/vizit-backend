@@ -27,7 +27,7 @@ app.use(express.urlencoded({ extended: true }));
 // CORS configuration
 const allowedOrigins = [
     "http://localhost:5173",
-    "http://127.0.0.1:3100",
+    "https://vizit-seven.vercel.app",
 ];
 
 app.use(
