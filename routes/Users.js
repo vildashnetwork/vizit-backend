@@ -1,0 +1,258 @@
+import express from "express";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+import dotenv from "dotenv";
+import UserModel from "../models/Users.js";
+import decodeTokenFromReq from "./decode.js";
+
+dotenv.config();
+
+const router = express.Router();
+const SALT_ROUNDS = 10;
+
+/* ----------------------------------
+   Helpers
+----------------------------------- */
+
+// Ensure JWT secret exists
+if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not defined in environment variables");
+}
+
+const generateToken = (user) => {
+    return jwt.sign(
+        {
+            id: user._id,
+            email: user.email,
+            name: user.name,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "15d" }
+    );
+};
+
+const validateEmail = (email) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const sanitizeUser = (user) => {
+    const { password, __v, ...safeUser } = user.toObject();
+    return safeUser;
+};
+
+/* ----------------------------------
+   REGISTER
+----------------------------------- */
+router.post("/register", async (req, res) => {
+    try {
+        let { name, email, number, profile, password, interest } = req.body;
+
+        // Basic validation
+        if (!name || !password || !number || !interest) {
+            return res.status(400).json({
+                message: "All fields are required",
+            });
+        }
+
+
+        // Email format check
+        if (!validateEmail(email)) {
+            return res.status(400).json({
+                message: "Invalid email format",
+            });
+        }
+
+        // Password strength
+        if (password.length < 6) {
+            return res.status(400).json({
+                message: "Password must be at least 6 characters",
+            });
+        }
+
+        // Check email uniqueness
+        const existingEmail = await UserModel.findOne({ email });
+        if (existingEmail) {
+            return res.status(409).json({
+                message: "Email already exists",
+            });
+        }
+
+        // Check phone uniqueness
+        const existingPhone = await UserModel.findOne({ number });
+        if (existingPhone) {
+            return res.status(409).json({
+                message: "Phone number already exists",
+            });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+        // Create user
+        const newUser = new UserModel({
+            name,
+            email,
+            number,
+            interest,
+            password: hashedPassword,
+            profile:
+                profile ||
+                `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+                    name
+                )}`,
+        });
+
+        const savedUser = await newUser.save();
+        const token = generateToken(savedUser);
+
+        res.status(201).json({
+            message: "Registration successful",
+            token,
+            user: sanitizeUser(savedUser),
+        });
+    } catch (err) {
+        console.error("Registration error:", err);
+        res.status(500).json({
+            message: "Internal server error",
+        });
+    }
+});
+
+router.post("/login", async (req, res) => {
+    try {
+        const { identifier, password } = req.body;
+
+        // Validate input
+        if (!identifier || !password) {
+            return res.status(400).json({
+                message: "Email or phone number and password are required",
+            });
+        }
+        const isEmail = validateEmail(identifier);
+        const query = isEmail ? { email: identifier } : { number: identifier };
+
+        // Find user by email or phone number
+        const user = await UserModel.findOne(query);
+
+        if (!user) {
+            return res.status(401).json({
+                message: "Invalid credentials",
+
+            });
+        }
+
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+
+        if (!isPasswordValid) {
+            return res.status(401).json({
+                message: "Invalid credentials",
+            });
+        }
+
+        const token = generateToken(user);
+
+        res.status(200).json({
+            message: "Login successful",
+            token,
+            user: sanitizeUser(user),
+        });
+    } catch (err) {
+        console.error("Login error:", err);
+        res.status(500).json({
+            message: "Internal server error",
+        });
+    }
+});
+
+router.get("/decode/token/user", async (req, res) => {
+    try {
+        // call decode helper with the full request so it can check body, headers or cookies
+        const result = decodeTokenFromReq(req);
+        if (!result || !result.ok) {
+            return res.status(result && result.status ? result.status : 401).json({ message: result && result.message ? result.message : "Failed to decode token" });
+        }
+        // return res.status(200).json({ data: result.payload });
+        //find user by id from payload
+        const user = await UserModel.findById(result.payload.id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        return res.status(200).json({ user: sanitizeUser(user) });
+    }
+    catch (error) {
+        console.error("Token decode error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+//get all users"
+
+router.get("/all", async (req, res) => {
+    try {
+        const users = await UserModel.find({});
+        res.status(200).json(users);
+    } catch (err) {
+        console.error("Fetch users error:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+router.delete("/all", async (req, res) => {
+    try {
+        const users = await UserModel.deleteMany({});
+        res.status(201).json({ message: "alll deleted" });
+    } catch (err) {
+        console.error("Fetch users error:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+router.put("/edt/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const {
+            Notifications,
+            name,
+            email,
+            profile
+        } = req.body;
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            id,
+            {
+                $set: {
+                    Notifications,
+                    name,
+                    email,
+                    profile
+                }
+            },
+            { new: true }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        res.status(200).json({
+            message: "User updated successfully",
+            user: updatedUser
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+
+export default router;
