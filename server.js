@@ -148,8 +148,13 @@ app.use(
 );
 
 // Specifically handle preflight requests for all routes globally
-app.options("*", cors());
+// ... after app.use(cors(...))
 
+// Specifically handle preflight requests for all routes globally
+// Updated syntax for Express 5 / Node 22+
+app.options("(.*)", cors());
+
+// ... then your helmet and other middleware
 // --- 2. SECURITY & LOGGING MIDDLEWARE ---
 // Configure helmet to allow cross-origin resource sharing
 app.use(helmet({
