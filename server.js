@@ -121,7 +121,7 @@ import allcalls from "./routes/calling.js";
 
 env.config();
 
-app.use(cors())
+app.use(cors());
 
 // --- 1. CORS CONFIGURATION (MUST BE FIRST) ---
 // const allowedOrigins = [
