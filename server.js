@@ -18,13 +18,10 @@ import allcalls from "./routes/calling.js"
 
 env.config();
 
-// Middleware
-app.use(helmet());
-app.use(morgan(":method :url :status :response-time ms - :res[content-length]"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// CORS configuration
+// 1. Initialize app (already done via socket.js import likely)
+
+// 2. CORS MUST BE FIRST
 const allowedOrigins = [
     "http://localhost:5173",
     "https://vizit-seven.vercel.app",
@@ -34,10 +31,7 @@ const allowedOrigins = [
 app.use(
     cors({
         origin: function (origin, callback) {
-            // Allow requests with no origin (like mobile apps or curl)
-            if (!origin) return callback(null, true);
-
-            if (allowedOrigins.indexOf(origin) !== -1) {
+            if (!origin || allowedOrigins.indexOf(origin) !== -1) {
                 callback(null, true);
             } else {
                 callback(new Error("Not allowed by CORS"));
@@ -45,9 +39,42 @@ app.use(
         },
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         credentials: true,
-        optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+        optionsSuccessStatus: 200
     })
 );
+
+// Specifically handle preflight requests for all routes
+app.options("*", cors());
+// Middleware
+app.use(helmet());
+app.use(morgan(":method :url :status :response-time ms - :res[content-length]"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// CORS configuration
+// const allowedOrigins = [
+//     "http://localhost:5173",
+//     "https://vizit-seven.vercel.app",
+//     "http://localhost:5174",
+// ];
+
+// app.use(
+//     cors({
+//         origin: function (origin, callback) {
+//             // Allow requests with no origin (like mobile apps or curl)
+//             if (!origin) return callback(null, true);
+
+//             if (allowedOrigins.indexOf(origin) !== -1) {
+//                 callback(null, true);
+//             } else {
+//                 callback(new Error("Not allowed by CORS"));
+//             }
+//         },
+//         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//         credentials: true,
+//         optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+//     })
+// );
 
 // Routes
 app.use("/api/owner", ownerroute);
