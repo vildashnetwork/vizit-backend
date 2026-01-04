@@ -102,7 +102,6 @@
 
 
 
-
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -132,31 +131,19 @@ const allowedOrigins = [
 app.use(
     cors({
         origin: function (origin, callback) {
-            // Allow requests with no origin (like mobile apps or curl)
-            if (!origin) return callback(null, true);
-
-            if (allowedOrigins.indexOf(origin) !== -1) {
+            if (!origin || allowedOrigins.indexOf(origin) !== -1) {
                 callback(null, true);
             } else {
                 callback(new Error("Not allowed by CORS"));
             }
         },
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        credentials: true, // Required for cookies/sessions/authorization headers
+        credentials: true,
         optionsSuccessStatus: 200
     })
 );
 
-// Specifically handle preflight requests for all routes globally
-// ... after app.use(cors(...))
-
-// Specifically handle preflight requests for all routes globally
-// Updated syntax for Express 5 / Node 22+
-app.options("(.*)", cors());
-
-// ... then your helmet and other middleware
 // --- 2. SECURITY & LOGGING MIDDLEWARE ---
-// Configure helmet to allow cross-origin resource sharing
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
