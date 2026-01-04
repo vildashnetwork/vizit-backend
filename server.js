@@ -121,27 +121,29 @@ import allcalls from "./routes/calling.js";
 
 env.config();
 
-// --- 1. CORS CONFIGURATION (MUST BE FIRST) ---
-const allowedOrigins = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "https://vizit-seven.vercel.app",
-];
+app.use(cors())
 
-app.use(
-    cors({
-        origin: function (origin, callback) {
-            if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-                callback(null, true);
-            } else {
-                callback(new Error("Not allowed by CORS"));
-            }
-        },
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        credentials: true,
-        optionsSuccessStatus: 200
-    })
-);
+// --- 1. CORS CONFIGURATION (MUST BE FIRST) ---
+// const allowedOrigins = [
+//     "http://localhost:5173",
+//     "http://localhost:5174",
+//     "https://vizit-seven.vercel.app",
+// ];
+
+// app.use(
+//     cors({
+//         origin: function (origin, callback) {
+//             if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+//                 callback(null, true);
+//             } else {
+//                 callback(new Error("Not allowed by CORS"));
+//             }
+//         },
+//         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//         credentials: true,
+//         optionsSuccessStatus: 200
+//     })
+// );
 
 // --- 2. SECURITY & LOGGING MIDDLEWARE ---
 app.use(helmet({
