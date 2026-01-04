@@ -117,30 +117,30 @@ env.config();
 
 
 // --- 1. MANUAL CORS OVERRIDE (USE THIS INSTEAD OF THE CORS PACKAGE) ---
-app.use((req, res, next) => {
-    const allowedOrigins = [
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "https://vizit-seven.vercel.app"
-    ];
-    const origin = req.headers.origin;
+// app.use((req, res, next) => {
+//     const allowedOrigins = [
+//         "http://localhost:5173",
+//         "http://localhost:5174",
+//         "https://vizit-seven.vercel.app"
+//     ];
+//     const origin = req.headers.origin;
 
-    if (allowedOrigins.includes(origin)) {
-        // This explicitly sets the origin instead of '*'
-        res.setHeader('Access-Control-Allow-Origin', origin);
-    }
+//     if (allowedOrigins.includes(origin)) {
+//         // This explicitly sets the origin instead of '*'
+//         res.setHeader('Access-Control-Allow-Origin', origin);
+//     }
 
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+//     res.setHeader('Access-Control-Allow-Credentials', 'true');
+//     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+//     res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
 
-    // Handle the Preflight (OPTIONS) request immediately
-    if (req.method === 'OPTIONS') {
-        return res.status(200).json({});
-    }
+//     // Handle the Preflight (OPTIONS) request immediately
+//     if (req.method === 'OPTIONS') {
+//         return res.status(200).json({});
+//     }
 
-    next();
-});
+//     next();
+// });
 
 // --- 2. SECURITY & OTHER MIDDLEWARE ---
 app.use(
