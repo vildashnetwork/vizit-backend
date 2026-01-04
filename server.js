@@ -28,6 +28,7 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
     "http://localhost:5173",
     "https://vizit-seven.vercel.app",
+    "http://localhost:5174",
 ];
 
 app.use(
