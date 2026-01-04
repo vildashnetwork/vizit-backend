@@ -53,20 +53,18 @@ app.use(cors());
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
+
     cors: {
-        origin: "*"
+        origin: [
+            "http://localhost:5173",
+            "http://localhost:5174",
+            "https://vizit-seven.vercel.app",
+            "https://wicichats.vercel.app"
+        ]
     }
 });
 
 
-//    cors: {
-//         origin: [
-//             "http://localhost:5173",
-//             "http://localhost:5174",
-//             "https://vizit-seven.vercel.app",
-//             "https://wicichats.vercel.app"
-//         ]
-//     }
 // Store online users { userId: socketId }
 const userSocketMap = {};
 
