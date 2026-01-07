@@ -70,51 +70,38 @@ export const getMessages = async (req, res) => {
 
 
 
-
-
-
-
-
-
-
-
-
 export const sendMessage = [
     upload.fields([
         { name: "image", maxCount: 1 },
-        { name: "video", maxCount: 1 }
+        { name: "video", maxCount: 1 },
     ]),
     async (req, res) => {
         try {
             const { id: receiverId } = req.params;
-            const { senderId, text } = req.body;
+            // Prefer authenticated user id (req.user), fallback to body
+            const senderId = req.user?._id?.toString() || req.body.senderId;
+
+            if (!senderId || !receiverId)
+                return res.status(400).json({ error: "senderId and receiverId required" });
+
+            const { text = "" } = req.body;
 
             let imageUrl = null;
             let videoUrl = null;
 
-            // Handle image upload
             if (req.files?.image?.[0]) {
                 imageUrl = await new Promise((resolve, reject) => {
-                    const stream = cloudinary.uploader.upload_stream(
-                        { resource_type: "image" },
-                        (error, result) => {
-                            if (error) return reject(error);
-                            resolve(result.secure_url);
-                        }
+                    const stream = cloudinary.uploader.upload_stream({ resource_type: "image" }, (err, result) =>
+                        err ? reject(err) : resolve(result.secure_url)
                     );
                     stream.end(req.files.image[0].buffer);
                 });
             }
 
-            // Handle video upload
             if (req.files?.video?.[0]) {
                 videoUrl = await new Promise((resolve, reject) => {
-                    const stream = cloudinary.uploader.upload_stream(
-                        { resource_type: "video" },
-                        (error, result) => {
-                            if (error) return reject(error);
-                            resolve(result.secure_url);
-                        }
+                    const stream = cloudinary.uploader.upload_stream({ resource_type: "video" }, (err, result) =>
+                        err ? reject(err) : resolve(result.secure_url)
                     );
                     stream.end(req.files.video[0].buffer);
                 });
@@ -125,21 +112,95 @@ export const sendMessage = [
                 receiverId,
                 text,
                 image: imageUrl,
-                video: videoUrl
+                video: videoUrl,
             });
 
             await newMessage.save();
 
-            // Real-time messaging
-            const receiverSocketId = getReceiverSocketId(receiverId);
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("newMessage", newMessage);
-            }
+            // Emit to receiver(s)
+            const receiverSockets = getReceiverSocketId(receiverId);
+            receiverSockets.forEach((sockId) => io.to(sockId).emit("newMessage", newMessage));
 
-            res.status(201).json(newMessage);
+            // Echo to sender's other sockets (so the sender's other tabs/devices also receive it)
+            const senderSockets = getReceiverSocketId(senderId);
+            senderSockets.forEach((sockId) => io.to(sockId).emit("newMessage", newMessage));
+
+            return res.status(201).json(newMessage);
         } catch (error) {
-            console.error("Error in sendMessage:", error.message);
-            res.status(500).json({ error: "Internal Server Error" });
+            console.error("Error in sendMessage:", error);
+            return res.status(500).json({ error: "Internal Server Error" });
         }
     },
 ];
+
+
+
+
+
+
+
+
+// export const sendMessage = [
+//     upload.fields([
+//         { name: "image", maxCount: 1 },
+//         { name: "video", maxCount: 1 }
+//     ]),
+//     async (req, res) => {
+//         try {
+//             const { id: receiverId } = req.params;
+//             const { senderId, text } = req.body;
+
+//             let imageUrl = null;
+//             let videoUrl = null;
+
+//             // Handle image upload
+//             if (req.files?.image?.[0]) {
+//                 imageUrl = await new Promise((resolve, reject) => {
+//                     const stream = cloudinary.uploader.upload_stream(
+//                         { resource_type: "image" },
+//                         (error, result) => {
+//                             if (error) return reject(error);
+//                             resolve(result.secure_url);
+//                         }
+//                     );
+//                     stream.end(req.files.image[0].buffer);
+//                 });
+//             }
+
+//             // Handle video upload
+//             if (req.files?.video?.[0]) {
+//                 videoUrl = await new Promise((resolve, reject) => {
+//                     const stream = cloudinary.uploader.upload_stream(
+//                         { resource_type: "video" },
+//                         (error, result) => {
+//                             if (error) return reject(error);
+//                             resolve(result.secure_url);
+//                         }
+//                     );
+//                     stream.end(req.files.video[0].buffer);
+//                 });
+//             }
+
+//             const newMessage = new Message({
+//                 senderId,
+//                 receiverId,
+//                 text,
+//                 image: imageUrl,
+//                 video: videoUrl
+//             });
+
+//             await newMessage.save();
+
+//             // Real-time messaging
+//             const receiverSocketId = getReceiverSocketId(receiverId);
+//             if (receiverSocketId) {
+//                 io.to(receiverSocketId).emit("newMessage", newMessage);
+//             }
+
+//             res.status(201).json(newMessage);
+//         } catch (error) {
+//             console.error("Error in sendMessage:", error.message);
+//             res.status(500).json({ error: "Internal Server Error" });
+//         }
+//     },
+// ];
