@@ -403,6 +403,9 @@ router.delete("/houses/:id", async (req, res) => {
 
 /**
  * Get all houses (optional filtering)
+ * 
+ * 
+ * gBLzrqc4qFBXXD0i homesvizit_db_user
  */
 router.get("/houses", async (req, res) => {
     try {
