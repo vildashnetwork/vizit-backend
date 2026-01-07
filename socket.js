@@ -179,15 +179,37 @@ io.on("connection", (socket) => {
     io.emit("getOnlineUsers", Array.from(userSocketMap.keys()));
 
     // Simple pass-through message event if you want to use socket->server->db route
+    // socket.on("sendMessage", (payload) => {
+    //     // optional: validate payload, save to DB etc.
+    //     // then broadcast to receiver
+    //     const { message } = payload || {};
+    //     if (!message) return;
+    //     const toUserId = message.receiverId;
+    //     const sockets = getReceiverSocketId(toUserId);
+    //     sockets.forEach((sockId) => io.to(sockId).emit("newMessage", message));
+    // });
+
     socket.on("sendMessage", (payload) => {
-        // optional: validate payload, save to DB etc.
-        // then broadcast to receiver
-        const { message } = payload || {};
-        if (!message) return;
-        const toUserId = message.receiverId;
-        const sockets = getReceiverSocketId(toUserId);
-        sockets.forEach((sockId) => io.to(sockId).emit("newMessage", message));
+        if (!payload || !payload.message) return;
+
+        const { message } = payload;
+        const { receiverId, senderId, _id: messageId } = message;
+
+        if (!receiverId || !senderId || !messageId) return;
+
+        const receiverSocketIds = getReceiverSocketId(receiverId);
+
+        if (!Array.isArray(receiverSocketIds)) return;
+
+        receiverSocketIds.forEach((socketId) => {
+            // 🚫 prevent echoing message back to sender socket
+            if (socketId !== socket.id) {
+                io.to(socketId).emit("newMessage", message);
+            }
+        });
     });
+
+
 
     /** Peer/call events (unchanged but robust) **/
     socket.on("user:call", ({ toUserId, offer }) => {
