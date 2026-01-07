@@ -44,52 +44,86 @@ export const getMessages = async (req, res) => {
     }
 };
 
-// export const sendMessage = async (req, res) => {
-//     try {
-//         const { id: receiverId } = req.params;
-//         const { senderId } = req.body;
-//         const { text, image } = req.body;
 
-//         let imageUrl;
 
-//         if (image) {
-//             // Save image to cloudinary
-//             const uploadedResponse = await cloudinary.uploader.upload(image);
-//             imageUrl = uploadedResponse.secure_url;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// export const sendMessage = [
+//     upload.fields([
+//         { name: "image", maxCount: 1 },
+//         { name: "video", maxCount: 1 }
+//     ]),
+//     async (req, res) => {
+//         try {
+//             const { id: receiverId } = req.params;
+//             const { senderId, text } = req.body;
+
+//             let imageUrl = null;
+//             let videoUrl = null;
+
+//             // Handle image upload
+//             if (req.files?.image?.[0]) {
+//                 imageUrl = await new Promise((resolve, reject) => {
+//                     const stream = cloudinary.uploader.upload_stream(
+//                         { resource_type: "image" },
+//                         (error, result) => {
+//                             if (error) return reject(error);
+//                             resolve(result.secure_url);
+//                         }
+//                     );
+//                     stream.end(req.files.image[0].buffer);
+//                 });
+//             }
+
+//             // Handle video upload
+//             if (req.files?.video?.[0]) {
+//                 videoUrl = await new Promise((resolve, reject) => {
+//                     const stream = cloudinary.uploader.upload_stream(
+//                         { resource_type: "video" },
+//                         (error, result) => {
+//                             if (error) return reject(error);
+//                             resolve(result.secure_url);
+//                         }
+//                     );
+//                     stream.end(req.files.video[0].buffer);
+//                 });
+//             }
+
+//             const newMessage = new Message({
+//                 senderId,
+//                 receiverId,
+//                 text,
+//                 image: imageUrl,
+//                 video: videoUrl
+//             });
+
+//             await newMessage.save();
+
+//             // Real-time messaging
+//             const receiverSocketId = getReceiverSocketId(receiverId);
+//             if (receiverSocketId) {
+//                 io.to(receiverSocketId).emit("newMessage", newMessage);
+//             }
+
+//             res.status(201).json(newMessage);
+//         } catch (error) {
+//             console.error("Error in sendMessage:", error.message);
+//             res.status(500).json({ error: "Internal Server Error" });
 //         }
-
-//         const newMessage = new Message({
-//             senderId,
-//             receiverId,
-//             text,
-//             image: imageUrl
-//         });
-
-//         await newMessage.save();
-
-//         // real-time messaging using socket.io
-//         const receiverSocketId = getReceiverSocketId(receiverId);
-//         if (receiverSocketId) {
-//             io.to(receiverSocketId).emit('newMessage', newMessage);
-//         }
-
-//         res.status(201).json(newMessage);
-//     } catch (error) {
-//         console.log("Error in sendMessage: ", error.message);
-//         res.status(500).json({ error: "Internal Server Error" });
-//     }
-// }
-
-
-
-
-
-
-
-
-
-
-
+//     },
+// ];
 
 
 
@@ -107,17 +141,26 @@ export const getMessages = async (req, res) => {
 export const sendMessage = [
     upload.fields([
         { name: "image", maxCount: 1 },
-        { name: "video", maxCount: 1 }
+        { name: "video", maxCount: 1 },
     ]),
+
     async (req, res) => {
         try {
             const { id: receiverId } = req.params;
-            const { senderId, text } = req.body;
+            const { senderId, text = "" } = req.body;
+
+            if (!senderId || !receiverId) {
+                return res.status(400).json({ error: "senderId and receiverId required" });
+            }
+
+            if (!text && !req.files?.image && !req.files?.video) {
+                return res.status(400).json({ error: "Message content is empty" });
+            }
 
             let imageUrl = null;
             let videoUrl = null;
 
-            // Handle image upload
+            /* ================= IMAGE UPLOAD ================= */
             if (req.files?.image?.[0]) {
                 imageUrl = await new Promise((resolve, reject) => {
                     const stream = cloudinary.uploader.upload_stream(
@@ -131,7 +174,7 @@ export const sendMessage = [
                 });
             }
 
-            // Handle video upload
+            /* ================= VIDEO UPLOAD ================= */
             if (req.files?.video?.[0]) {
                 videoUrl = await new Promise((resolve, reject) => {
                     const stream = cloudinary.uploader.upload_stream(
@@ -145,25 +188,35 @@ export const sendMessage = [
                 });
             }
 
+            /* ================= SAVE MESSAGE ================= */
             const newMessage = new Message({
                 senderId,
                 receiverId,
                 text,
                 image: imageUrl,
-                video: videoUrl
+                video: videoUrl,
             });
 
             await newMessage.save();
 
-            // Real-time messaging
-            const receiverSocketId = getReceiverSocketId(receiverId);
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("newMessage", newMessage);
-            }
+            /* ================= REAL-TIME DELIVERY ================= */
+
+            const receiverSockets = getReceiverSocketId(receiverId);
+            const senderSockets = getReceiverSocketId(senderId);
+
+            // Send to receiver (all devices)
+            receiverSockets?.forEach((socketId) => {
+                io.to(socketId).emit("newMessage", newMessage);
+            });
+
+            // Echo to sender (other tabs/devices)
+            senderSockets?.forEach((socketId) => {
+                io.to(socketId).emit("newMessage", newMessage);
+            });
 
             res.status(201).json(newMessage);
         } catch (error) {
-            console.error("Error in sendMessage:", error.message);
+            console.error("❌ Error in sendMessage:", error);
             res.status(500).json({ error: "Internal Server Error" });
         }
     },
