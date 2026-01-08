@@ -112,6 +112,7 @@ import like from "./routes/likecomment.js";
 import messaging from "./routes/message.route.js";
 import allcalls from "./routes/calling.js";
 import apointment from "./routes/apoitment.js";
+import video from "./routes/video.js";
 
 env.config();
 
@@ -163,6 +164,7 @@ app.use("/api/like", like);
 app.use("/api/messages", messaging);
 app.use("/api/call", allcalls);
 app.use("/api/apointment", apointment);
+app.use("/api/video", video);
 
 app.get("/", (_req, res) => {
     res.send("server is on");
