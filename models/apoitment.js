@@ -35,6 +35,10 @@ const apoitmentSchema = new mongoose.Schema({
     time: {
         type: String,
         required: true
+    },
+    reason: {
+        type: String,
+        default: ""
     }
 
 },
