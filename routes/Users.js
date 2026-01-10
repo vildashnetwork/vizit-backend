@@ -253,6 +253,47 @@ router.put("/edt/:id", async (req, res) => {
 });
 
 
+//save houses
+router.put("/save/house/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { houseId } = req.body;
+        const user = await UserModel.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        const isHouseSaved = user.savedHouses.includes(houseId);
+        if (isHouseSaved) {
+            return res.status(400).json({ message: "House already saved" });
+        }
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            id,
+            { $push: { savedHouses: houseId } },
+            { new: true }
+        );
+        res.status(200).json({
+            message: "House saved successfully",
+            user: updatedUser
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
 
+//get saved house ids
+router.get("/saved/houses/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = await UserModel.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        res.status(200).json({ savedHouses: user.savedHouses });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
 
 export default router;

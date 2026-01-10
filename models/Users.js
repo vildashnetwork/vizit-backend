@@ -30,6 +30,10 @@ const User = new mongoose.Schema({
     Notifications: {
         type: Boolean,
         default: true
+    },
+    savedHouses: {
+        type: Array,
+        default: []
     }
 
 },
