@@ -64,7 +64,15 @@ router.get("/user/:userID", async (req, res) => {
         res.status(500).json(err);
     }
 });
-
+// to delete apointment
+router.delete("/:id", async (req, res) => {
+    try {
+        await Apoitment.findByIdAndDelete(req.params.id);
+        res.status(200).json("Appointment has been deleted...");
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
 
 
 export default router;
