@@ -6,7 +6,13 @@ const router = express.Router();
 // Create a new appointment
 router.post("/", async (req, res) => {
     try {
+
         const newApoitment = new Apoitment(req.body);
+        const finduserId = await Apoitment.findOne({ userID: req.body.userID, listingId: req.body.listingId });
+        if (finduserId) {
+            return res.status(400).json({ message: "Appointment already exists for this user and listing." });
+        }
+
         const savedApoitment = await newApoitment.save();
         res.status(201).json(savedApoitment);
     } catch (err) {
