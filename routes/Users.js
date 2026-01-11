@@ -296,4 +296,35 @@ router.get("/saved/houses/:id", async (req, res) => {
     }
 });
 
+
+// remove saved listings 
+router.put("/remove/saved/house/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { houseId } = req.body;
+        const user = await UserModel.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        const isHouseSaved = user.savedHouses.includes(houseId);
+        if (!isHouseSaved) {
+            return res.status(400).json({ message: "House not found in saved list" });
+        }
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            id,
+            { $pull: { savedHouses: houseId } },
+            { new: true }
+        );
+        res.status(200).json({
+            message: "House removed from saved list successfully",
+            user: updatedUser
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
 export default router;
