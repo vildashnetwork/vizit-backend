@@ -326,5 +326,46 @@ router.put("/remove/saved/house/:id", async (req, res) => {
 });
 
 
+// add user chat id
+router.put("/add/chat/id/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { chatId } = req.body;
+        const user = await UserModel.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            id,
+            { $push: { allchatsId: chatId } },
+            { new: true }
+        );
+        res.status(200).json({
+            message: "Chat ID added successfully",
+            user: updatedUser
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+//get all chat ids
+router.get("/all/chats/id/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = await UserModel.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        res.status(200).json({ allchatsId: user.allchatsId });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
 
 export default router;

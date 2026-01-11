@@ -34,6 +34,10 @@ const User = new mongoose.Schema({
     savedHouses: {
         type: Array,
         default: []
+    },
+    allchatsId: {
+        type: Array,
+        default: []
     }
 
 },
