@@ -17,6 +17,7 @@ const io = new Server(httpServer, {
             "http://localhost:5174",
             "https://vizit-seven.vercel.app",
             "https://wicichats.vercel.app",
+            "https://vizit-homes-k2n7.onrender.com"
         ],
         credentials: true,
     },
