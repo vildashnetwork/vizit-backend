@@ -353,19 +353,45 @@ router.put("/add/chat/id/:id", async (req, res) => {
 
 
 //get all chat ids
-router.get("/all/chats/id/:id", async (req, res) => {
+// add user chat id without duplicates and remove existing duplicates
+router.put("/add/chat/id/:id", async (req, res) => {
     try {
         const { id } = req.params;
+        const { chatId } = req.body;
+
         const user = await UserModel.findById(id);
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        res.status(200).json({ allchatsId: user.allchatsId });
+
+        // Combine existing chat IDs with new one
+        let updatedChats = [...user.allchatsId, chatId];
+
+        // Remove duplicates using Set
+        updatedChats = [...new Set(updatedChats)];
+
+        // Update user with deduplicated array
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            id,
+            { allchatsId: updatedChats },
+            { new: true }
+        );
+
+        // Check if chat was already present
+        const wasAlreadyPresent = user.allchatsId.includes(chatId);
+
+        res.status(200).json({
+            message: wasAlreadyPresent
+                ? "Chat already existed, duplicates removed"
+                : "Chat ID added successfully",
+            user: updatedUser
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
 
 
 export default router;

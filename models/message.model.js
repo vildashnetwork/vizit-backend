@@ -23,6 +23,10 @@ const messageSchema = new mongoose.Schema(
         },
         video: {
             type: String,
+        },
+        readistrue: {
+            type: Boolean,
+            required: true
         }
     },
     { timestamps: true }
