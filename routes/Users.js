@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
+import mongoose from "mongoose "
 import decodeTokenFromReq from "./decode.js";
 
 dotenv.config();
