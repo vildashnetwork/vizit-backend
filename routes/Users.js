@@ -352,8 +352,7 @@ router.put("/add/chat/id/:id", async (req, res) => {
 
 
 
-//get all chat ids
-// add user chat id without duplicates and remove existing duplicates
+// add user chat id without duplicates and clean existing duplicates
 router.put("/add/chat/id/:id", async (req, res) => {
     try {
         const { id } = req.params;
@@ -364,21 +363,23 @@ router.put("/add/chat/id/:id", async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // Combine existing chat IDs with new one
-        let updatedChats = [...user.allchatsId, chatId];
+        // Normalize all IDs as strings
+        const existingIds = user.allchatsId.map(cid => cid.toString());
 
-        // Remove duplicates using Set
-        updatedChats = [...new Set(updatedChats)];
+        // Add new chatId as string
+        existingIds.push(chatId.toString());
 
-        // Update user with deduplicated array
+        // Deduplicate
+        const uniqueIds = [...new Set(existingIds)];
+
+        // Save back to MongoDB as ObjectIds
         const updatedUser = await UserModel.findByIdAndUpdate(
             id,
-            { allchatsId: updatedChats },
+            { allchatsId: uniqueIds }, // if your schema expects ObjectId, Mongoose will cast strings automatically
             { new: true }
         );
 
-        // Check if chat was already present
-        const wasAlreadyPresent = user.allchatsId.includes(chatId);
+        const wasAlreadyPresent = existingIds.includes(chatId.toString());
 
         res.status(200).json({
             message: wasAlreadyPresent
@@ -391,6 +392,7 @@ router.put("/add/chat/id/:id", async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
 
 
 
