@@ -330,43 +330,51 @@ router.put("/remove/saved/house/:id", async (req, res) => {
 
 
 
-// add user chat id without duplicates
 router.put("/add/chat/id/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const { chatId } = req.body;
+        let { chatId } = req.body;
 
-        const user = await UserModel.findById(id);
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+        if (!chatId || !mongoose.Types.ObjectId.isValid(chatId)) {
+            return res.status(400).json({ message: "Invalid chatId" });
         }
 
-        // Combine existing and new chatId as strings
-        const allIds = [...user.allchatsId.map(cid => cid.toString()), chatId.toString()];
+        const user = await UserModel.findById(id);
+        if (!user) return res.status(404).json({ message: "User not found" });
 
-        // Deduplicate
-        const uniqueIds = [...new Set(allIds)];
+        // Convert all existing IDs to strings and filter invalid ones
+        let existingIds = user.allchatsId
+            .map(cid => cid.toString())
+            .filter(cid => mongoose.Types.ObjectId.isValid(cid));
 
-        // Convert back to ObjectIds
-        const mongooseIds = uniqueIds.map(cid => require("mongoose").Types.ObjectId(cid));
+        // Check if chatId is already present
+        const alreadyExists = existingIds.includes(chatId.toString());
 
-        // Update user
+        if (!alreadyExists) {
+            existingIds.push(chatId.toString());
+        }
+
+        // Deduplicate just in case
+        const uniqueIds = [...new Set(existingIds)];
+
+        // Convert back to ObjectIds for Mongo
+        const mongooseIds = uniqueIds.map(cid => mongoose.Types.ObjectId(cid));
+
         const updatedUser = await UserModel.findByIdAndUpdate(
             id,
             { allchatsId: mongooseIds },
             { new: true }
         );
 
-        const wasAlreadyPresent = user.allchatsId.map(c => c.toString()).includes(chatId.toString());
-
         res.status(200).json({
-            message: wasAlreadyPresent
+            message: alreadyExists
                 ? "Chat already existed, duplicates removed"
                 : "Chat ID added successfully",
-            user: updatedUser
+            user: updatedUser,
         });
+
     } catch (error) {
-        console.error(error);
+        console.error("Error adding chat ID:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
