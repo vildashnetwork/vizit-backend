@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
-import mongoose from "mongoose "
+import mongoose from "mongoose"
 import decodeTokenFromReq from "./decode.js";
 
 dotenv.config();
@@ -325,6 +325,14 @@ router.put("/remove/saved/house/:id", async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
+
+
+
+
+
+
+
 
 
 
