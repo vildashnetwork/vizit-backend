@@ -337,7 +337,6 @@ router.put("/remove/saved/house/:id", async (req, res) => {
 
 
 
-// add user chat id without duplicates
 router.put("/add/chat/id/:id", async (req, res) => {
     try {
         const { id } = req.params;
@@ -347,54 +346,39 @@ router.put("/add/chat/id/:id", async (req, res) => {
             return res.status(400).json({ message: "chatId is required" });
         }
 
-        // Find user by ID
         const user = await UserModel.findById(id);
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // Ensure allchatsId is an array
-        const existingIds = Array.isArray(user.allchatsId) ? user.allchatsId.map(cid => cid.toString()) : [];
+        // Ensure array exists
+        let chats = Array.isArray(user.allchatsId)
+            ? user.allchatsId.map(String)
+            : [];
 
-        // Combine existing and new chatId
-        const combinedIds = [...existingIds, chatId.toString()];
+        const chatIdStr = String(chatId);
 
-        // Deduplicate
-        const uniqueIds = [...new Set(combinedIds)];
-
-        // Validate and convert to ObjectId
-        let mongooseIds = [];
-        try {
-            mongooseIds = uniqueIds.map(cid => mongoose.Types.ObjectId(cid));
-        } catch (err) {
-            console.error("Invalid chatId format:", err);
-            return res.status(400).json({ message: "Invalid chat ID format" });
+        // Add only if not included
+        if (!chats.includes(chatIdStr)) {
+            chats.push(chatIdStr);
         }
 
-        // Update user
-        const updatedUser = await UserModel.findByIdAndUpdate(
-            id,
-            { allchatsId: mongooseIds },
-            { new: true }
-        );
+        // Remove duplicates (safety net)
+        chats = [...new Set(chats)];
 
-        const wasAlreadyPresent = existingIds.includes(chatId.toString());
+        user.allchatsId = chats;
+        await user.save();
 
         res.status(200).json({
-            message: wasAlreadyPresent
-                ? "Chat already existed, duplicates removed"
-                : "Chat ID added successfully",
-            user: updatedUser
+            message: "Chat processed successfully",
+            allchatsId: user.allchatsId
         });
 
     } catch (error) {
-        console.error("Add chat ID error:", error);
+        console.error("Add chat error:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
-
-
-
 
 
 export default router;
