@@ -337,52 +337,58 @@ router.put("/remove/saved/house/:id", async (req, res) => {
 
 
 
-
+// add user chat id without duplicates
 router.put("/add/chat/id/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        let { chatId } = req.body;
+        const { chatId } = req.body;
 
-        if (!chatId || !mongoose.Types.ObjectId.isValid(chatId)) {
-            return res.status(400).json({ message: "Invalid chatId" });
+        if (!chatId) {
+            return res.status(400).json({ message: "chatId is required" });
         }
 
+        // Find user by ID
         const user = await UserModel.findById(id);
-        if (!user) return res.status(404).json({ message: "User not found" });
-
-        // Convert all existing IDs to strings and filter invalid ones
-        let existingIds = user.allchatsId
-            .map(cid => cid.toString())
-            .filter(cid => mongoose.Types.ObjectId.isValid(cid));
-
-        // Check if chatId is already present
-        const alreadyExists = existingIds.includes(chatId.toString());
-
-        if (!alreadyExists) {
-            existingIds.push(chatId.toString());
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
         }
 
-        // Deduplicate just in case
-        const uniqueIds = [...new Set(existingIds)];
+        // Ensure allchatsId is an array
+        const existingIds = Array.isArray(user.allchatsId) ? user.allchatsId.map(cid => cid.toString()) : [];
 
-        // Convert back to ObjectIds for Mongo
-        const mongooseIds = uniqueIds.map(cid => mongoose.Types.ObjectId(cid));
+        // Combine existing and new chatId
+        const combinedIds = [...existingIds, chatId.toString()];
 
+        // Deduplicate
+        const uniqueIds = [...new Set(combinedIds)];
+
+        // Validate and convert to ObjectId
+        let mongooseIds = [];
+        try {
+            mongooseIds = uniqueIds.map(cid => mongoose.Types.ObjectId(cid));
+        } catch (err) {
+            console.error("Invalid chatId format:", err);
+            return res.status(400).json({ message: "Invalid chat ID format" });
+        }
+
+        // Update user
         const updatedUser = await UserModel.findByIdAndUpdate(
             id,
             { allchatsId: mongooseIds },
             { new: true }
         );
 
+        const wasAlreadyPresent = existingIds.includes(chatId.toString());
+
         res.status(200).json({
-            message: alreadyExists
+            message: wasAlreadyPresent
                 ? "Chat already existed, duplicates removed"
                 : "Chat ID added successfully",
-            user: updatedUser,
+            user: updatedUser
         });
 
     } catch (error) {
-        console.error("Error adding chat ID:", error);
+        console.error("Add chat ID error:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
