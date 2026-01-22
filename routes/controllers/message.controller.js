@@ -238,6 +238,8 @@ export const markMessagesAsRead = async (req, res) => {
             { $set: { readistrue: true } }
         );
 
+        console.log("Messages marked as read:", result.modifiedCount);
+
         return res.status(200).json({
             success: true,
             updatedCount: result.modifiedCount
@@ -247,3 +249,4 @@ export const markMessagesAsRead = async (req, res) => {
         return res.status(500).json({ error: "Internal Server Error" });
     }
 };
+
