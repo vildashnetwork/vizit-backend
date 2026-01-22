@@ -16,10 +16,11 @@ import express from "express";
 import {
     getMessages,
     getUsersForSidebar,
-    sendMessage
+    sendMessage,
+    markMessagesAsRead
 } from "./controllers/message.controller.js";
-import { initiateCall, acceptCall, endCall, markMessagesAsRead } from "./controllers/videoCall.controller.js";
-// import {  } from "../controllers/message.controller.js";
+import { initiateCall, acceptCall, endCall } from "./controllers/videoCall.controller.js";
+// import {  } from "../controllers/message.controller.js"; markMessagesAsRead
 const router = express.Router();
 
 router.get("/users/:loggedInUserId", getUsersForSidebar);
