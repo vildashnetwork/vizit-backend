@@ -326,7 +326,10 @@ io.on("connection", (socket) => {
 });
 
 
-
+  socket.on("registerUser", (userId) => {
+        socket.userId = userId;
+        socket.join(userId); // join room with own user ID
+    });
   // listen for typing event
   socket.on("typing", ({ chatUserId, isTyping }) => {
     
