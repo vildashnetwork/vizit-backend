@@ -18,8 +18,8 @@ import {
     getUsersForSidebar,
     sendMessage
 } from "./controllers/message.controller.js";
-import { initiateCall, acceptCall, endCall } from "./controllers/videoCall.controller.js";
-import { markMessagesAsRead } from "../controllers/message.controller.js";
+import { initiateCall, acceptCall, endCall, markMessagesAsRead } from "./controllers/videoCall.controller.js";
+// import {  } from "../controllers/message.controller.js";
 const router = express.Router();
 
 router.get("/users/:loggedInUserId", getUsersForSidebar);
