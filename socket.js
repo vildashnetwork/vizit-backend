@@ -85,6 +85,27 @@ io.on("connection", (socket) => {
 
 
 
+    socket.on("markMessagesRead", async ({ chatUserId, readerId }) => {
+        // 1️⃣ Update DB
+        const result = await Message.updateMany(
+            {
+                senderId: chatUserId,
+                receiverId: readerId,
+                readistrue: false
+            },
+            { $set: { readistrue: true } }
+        );
+
+        // 2️⃣ Notify sender
+        const senderSocket = onlineUsers.get(chatUserId);
+        if (senderSocket) {
+            io.to(senderSocket).emit("messagesRead", {
+                byUserId: readerId,
+                chatUserId
+            });
+        }
+    });
+
     /** Peer/call events (unchanged but robust) **/
     socket.on("user:call", ({ toUserId, offer }) => {
         const receiverSockets = getReceiverSocketId(toUserId);

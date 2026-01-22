@@ -5,6 +5,8 @@ import Message from "../../models/message.model.js";
 import UserModel from "../../models/Users.js";
 import HouseOwerModel from "../../models/HouseOwners.js";
 import { upload } from '../multerConfig.js';
+
+// import { emitToUser } from "../../helpers/socketHelpers.js";
 export const getUsersForSidebar = async (req, res) => {
     try {
         const { loggedInUserId } = req.params;
@@ -219,16 +221,58 @@ export const sendMessage = [
 
 // markMessagesAsRead
 // markMessagesAsRead
+// export const markMessagesAsRead = async (req, res) => {
+//     try {
+//         const { chatUserId } = req.params; // the sender of messages
+//         const readerId =  req.body.readerId;
+
+//         if (!chatUserId || !readerId) {
+//             return res.status(400).json({ error: "chatUserId and readerId required" });
+//         }
+
+//         // Update all messages sent TO reader FROM chatUser
+//         const result = await Message.updateMany(
+//             {
+//                 senderId: chatUserId,
+//                 receiverId: readerId,
+//                 readistrue: false
+//             },
+//             { $set: { readistrue: true } }
+//         );
+
+//         console.log("Messages marked as read:", result.modifiedCount);
+
+//         return res.status(200).json({
+//             success: true,
+//             updatedCount: result.modifiedCount
+//         });
+//     } catch (error) {
+//         console.error("markMessagesAsRead error:", error);
+//         return res.status(500).json({ error: "Internal Server Error" });
+//     }
+// };
+
+
+
+
+
+
+
+
+
+
+
+
 export const markMessagesAsRead = async (req, res) => {
     try {
-        const { chatUserId } = req.params; // the sender of messages
-        const readerId = req.user?._id?.toString() || req.body.readerId;
+        const { chatUserId } = req.params;   // sender
+        const { readerId } = req.body;       // viewer
 
         if (!chatUserId || !readerId) {
             return res.status(400).json({ error: "chatUserId and readerId required" });
         }
 
-        // Update all messages sent TO reader FROM chatUser
+        // 1️⃣ Update DB
         const result = await Message.updateMany(
             {
                 senderId: chatUserId,
@@ -238,15 +282,21 @@ export const markMessagesAsRead = async (req, res) => {
             { $set: { readistrue: true } }
         );
 
-        console.log("Messages marked as read:", result.modifiedCount);
+        // 2️⃣ Notify sender in real time (blue tick)
+        const senderSockets = getReceiverSocketId(chatUserId) || [];
+        senderSockets.forEach(id =>
+            io.to(id).emit("messagesRead", {
+                byUserId: readerId,
+                chatUserId
+            })
+        );
 
         return res.status(200).json({
             success: true,
             updatedCount: result.modifiedCount
         });
     } catch (error) {
-        console.error("markMessagesAsRead error:", error);
-        return res.status(500).json({ error: "Internal Server Error" });
+        console.error("MARK MESSAGES READ ERROR:", error);
+        res.status(500).json({ error: error.message });
     }
 };
-
