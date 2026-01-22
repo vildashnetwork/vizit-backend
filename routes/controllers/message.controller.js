@@ -191,6 +191,7 @@ export const sendMessage = [
                 text,
                 image: imageUrl,
                 video: videoUrl,
+                readistrue: false
             });
 
             await newMessage.save();
