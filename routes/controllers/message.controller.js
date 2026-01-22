@@ -219,38 +219,32 @@ export const sendMessage = [
 
 export const markMessagesAsRead = async (req, res) => {
     try {
-        const { chatUserId } = req.params; // sender of messages
-        const readerId = req.user?._id || req.body.readerId;
+        const { chatUserId } = req.params; // the sender of the messages
+        const readerId = req.user?._id?.toString() || req.body.readerId;
 
         if (!chatUserId || !readerId) {
             return res.status(400).json({ error: "chatUserId and readerId required" });
         }
 
-        // Update unread messages sent TO reader FROM chatUser
+        // Update unread messages
         const result = await Message.updateMany(
-            {
-                senderId: chatUserId,
-                receiverId: readerId,
-                readistrue: false
-            },
+            { senderId: chatUserId, receiverId: readerId, readistrue: false },
             { $set: { readistrue: true } }
         );
 
-        // Notify sender in real time (blue tick)
+        // Emit socket event to the sender so they see blue ticks
         const senderSockets = getReceiverSocketId(chatUserId) || [];
         senderSockets.forEach(socketId => {
             io.to(socketId).emit("messagesRead", {
-                byUserId: readerId,
-                chatUserId,
+                byUserId: readerId, // the user who read the messages
+                chatUserId,         // the chat this applies to
             });
         });
 
-        return res.status(200).json({
-            success: true,
-            updatedCount: result.modifiedCount
-        });
+        return res.status(200).json({ success: true, updatedCount: result.modifiedCount });
     } catch (error) {
         console.error("markMessagesAsRead error:", error);
         return res.status(500).json({ error: "Internal Server Error" });
     }
 };
+
