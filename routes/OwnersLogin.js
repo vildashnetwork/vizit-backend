@@ -271,6 +271,51 @@ router.put("/edit/:id", async (req, res) => {
 
 
 
+router.put("/add/chat/idnow/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { chatId } = req.body;
+
+        // Validate input
+        if (!chatId) {
+            return res.status(400).json({
+                message: "chatId is required"
+            });
+        }
+
+        // Atomic update: add chatId only if it doesn't exist
+        const user = await HouseOwerModel.findByIdAndUpdate(
+            id,
+            {
+                $addToSet: {
+                    allchatsId: String(chatId)
+                }
+            },
+            {
+                new: true,       // return updated document
+                runValidators: true
+            }
+        );
+
+        // User not found
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
+            });
+        }
+
+        return res.status(200).json({
+            message: "Chat added successfully",
+            allchatsId: user.allchatsId
+        });
+
+    } catch (error) {
+        console.error("Add chat error:", error);
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+});
 
 
 router.put("/add/chat/id/:id", async (req, res) => {
