@@ -33,7 +33,7 @@ router.put(
     markMessagesAsRead
 );
 
-router.get("/user", getMessagesByUser)
+router.get("/user/:userId", getMessagesByUser)
 // POST /api/call/initiate
 router.post("/initiate", initiateCall);
 
