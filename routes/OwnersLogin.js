@@ -272,11 +272,6 @@ router.put("/edit/:id", async (req, res) => {
 
 
 
-import express from "express";
-import UserModel from "../models/User.js";
-import HouseOwerModel from "../models/HouseOwner.js";
-
-const router = express.Router();
 
 router.put("/add/chat/id/:id", async (req, res) => {
     try {
@@ -332,7 +327,6 @@ router.put("/add/chat/id/:id", async (req, res) => {
     }
 });
 
-export default router;
 
 
 
