@@ -282,32 +282,19 @@ router.put("/add/chat/id/:id", async (req, res) => {
             return res.status(400).json({ message: "chatId is required" });
         }
 
-        const user = await HouseOwerModel.findById(id);
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+        const result = await HouseOwerModel.updateOne(
+            { _id: id },
+            {
+                $addToSet: { allchatsId: String(chatId) } // prevents duplicates
+            }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ message: "Owner not found" });
         }
-
-        // Ensure array exists
-        let chats = Array.isArray(user.allchatsId)
-            ? user.allchatsId.map(String)
-            : [];
-
-        const chatIdStr = String(chatId);
-
-        // Add only if not included
-        if (!chats.includes(chatIdStr)) {
-            chats.push(chatIdStr);
-        }
-
-        // Remove duplicates (safety net)
-        chats = [...new Set(chats)];
-
-        user.allchatsId = chats;
-        await user.save();
 
         res.status(200).json({
-            message: "Chat processed successfully",
-            allchatsId: user.allchatsId
+            message: "Chat added successfully"
         });
 
     } catch (error) {
@@ -315,6 +302,7 @@ router.put("/add/chat/id/:id", async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
 
 
 
