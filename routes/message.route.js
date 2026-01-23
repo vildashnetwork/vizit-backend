@@ -17,7 +17,8 @@ import {
     getMessages,
     getUsersForSidebar,
     sendMessage,
-    markMessagesAsRead
+    markMessagesAsRead,
+    getMessagesByUser
 } from "./controllers/message.controller.js";
 import { initiateCall, acceptCall, endCall } from "./controllers/videoCall.controller.js";
 // import {  } from "../controllers/message.controller.js"; markMessagesAsRead
@@ -32,7 +33,7 @@ router.put(
     markMessagesAsRead
 );
 
-
+router.get("/user", getMessagesByUser)
 // POST /api/call/initiate
 router.post("/initiate", initiateCall);
 

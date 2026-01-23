@@ -300,3 +300,56 @@ export const markMessagesAsRead = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+
+
+
+// Get latest messages grouped by conversation for a user
+export const getMessagesByUser = async (req, res) => {
+    try {
+        const { userId } = req.params; // the logged-in user
+
+        if (!userId) {
+            return res.status(400).json({ error: "userId is required" });
+        }
+
+        // 1️⃣ Fetch all messages involving this user
+        const messages = await Message.find({
+            $or: [{ senderId: userId }, { receiverId: userId }]
+        }).sort({ createdAt: -1 }); // newest first
+
+        if (!messages.length) {
+            return res.status(200).json({ conversations: [] });
+        }
+
+        // 2️⃣ Group by other participant
+        const conversationsMap = {};
+
+        messages.forEach(msg => {
+            const otherUserId =
+                String(msg.senderId) === String(userId)
+                    ? String(msg.receiverId)
+                    : String(msg.senderId);
+
+            // Only keep the latest message per conversation
+            if (!conversationsMap[otherUserId]) {
+                conversationsMap[otherUserId] = {
+                    userId: otherUserId,
+                    lastMessage: msg.text || msg.image || msg.video || "",
+                    timestamp: msg.createdAt,
+                    read: msg.readistrue
+                };
+            }
+        });
+
+        // 3️⃣ Convert map to array & sort by latest timestamp
+        const conversations = Object.values(conversationsMap).sort(
+            (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        );
+
+        res.status(200).json({ conversations });
+    } catch (error) {
+        console.error("Error in getMessagesByUser:", error.message);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
