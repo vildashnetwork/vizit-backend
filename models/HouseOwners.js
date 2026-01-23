@@ -83,6 +83,10 @@ const HouseOwners = new mongoose.Schema({
     Notifications: {
         type: Boolean,
         default: true
+    },
+       allchatsId: {
+        type: Array,
+        default: []
     }
 
 },

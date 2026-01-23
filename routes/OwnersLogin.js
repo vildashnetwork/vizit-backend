@@ -254,4 +254,73 @@ router.put("/edit/:id", async (req, res) => {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+router.put("/add/chat/id/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { chatId } = req.body;
+
+        if (!chatId) {
+            return res.status(400).json({ message: "chatId is required" });
+        }
+
+        const user = await HouseOwerModel.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Ensure array exists
+        let chats = Array.isArray(user.allchatsId)
+            ? user.allchatsId.map(String)
+            : [];
+
+        const chatIdStr = String(chatId);
+
+        // Add only if not included
+        if (!chats.includes(chatIdStr)) {
+            chats.push(chatIdStr);
+        }
+
+        // Remove duplicates (safety net)
+        chats = [...new Set(chats)];
+
+        user.allchatsId = chats;
+        await user.save();
+
+        res.status(200).json({
+            message: "Chat processed successfully",
+            allchatsId: user.allchatsId
+        });
+
+    } catch (error) {
+        console.error("Add chat error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+
+
+
+
+
 export default router;
