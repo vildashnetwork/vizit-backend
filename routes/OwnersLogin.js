@@ -272,6 +272,11 @@ router.put("/edit/:id", async (req, res) => {
 
 
 
+import express from "express";
+import UserModel from "../models/User.js";
+import HouseOwerModel from "../models/HouseOwner.js";
+
+const router = express.Router();
 
 router.put("/add/chat/id/:id", async (req, res) => {
     try {
@@ -282,26 +287,53 @@ router.put("/add/chat/id/:id", async (req, res) => {
             return res.status(400).json({ message: "chatId is required" });
         }
 
-        const result = await HouseOwerModel.updateOne(
+        /* --------------------------------
+           1. Try USER first
+        -------------------------------- */
+        const userResult = await UserModel.updateOne(
             { _id: id },
-            {
-                $addToSet: { allchatsId: String(chatId) } // prevents duplicates
-            }
+            { $addToSet: { allchatsId: String(chatId) } }
         );
 
-        if (result.matchedCount === 0) {
-            return res.status(404).json({ message: "Owner not found" });
+        if (userResult.matchedCount > 0) {
+            return res.status(200).json({
+                message: "Chat added to user successfully",
+                model: "user"
+            });
         }
 
-        res.status(200).json({
-            message: "Chat added successfully"
+        /* --------------------------------
+           2. Try HOUSE OWNER
+        -------------------------------- */
+        const ownerResult = await HouseOwerModel.updateOne(
+            { _id: id },
+            { $addToSet: { allchatsId: String(chatId) } }
+        );
+
+        if (ownerResult.matchedCount > 0) {
+            return res.status(200).json({
+                message: "Chat added to owner successfully",
+                model: "houseowner"
+            });
+        }
+
+        /* --------------------------------
+           3. Not found in both
+        -------------------------------- */
+        return res.status(404).json({
+            message: "User or House Owner not found"
         });
 
     } catch (error) {
         console.error("Add chat error:", error);
-        res.status(500).json({ message: "Internal server error" });
+        res.status(500).json({
+            message: "Internal server error"
+        });
     }
 });
+
+export default router;
+
 
 
 
