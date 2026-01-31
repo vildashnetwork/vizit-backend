@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
 import mongoose from "mongoose"
 import decodeTokenFromReq from "./decode.js";
+import HouseOwerModel from "../models/HouseOwners.js";
 
 dotenv.config();
 
@@ -381,21 +382,31 @@ router.put("/add/chat/id/:id", async (req, res) => {
 });
 
 
-router.get("me/:id", async (req, res) => {
+router.get("/me/:email", async (req, res) => {
     try {
-        const { id } = req.params;
-        const user = UserModel.find(id)
+        const { email } = req.params;
+
+        // Check normal user
+        let user = await UserModel.findOne({ email });
+
         if (user) {
-            res.status(200).json({ user })
-        } else {
-            res.status(404).json({ message: "no user found with this ID" })
+            return res.status(200).json({ user, role: "user" });
         }
+
+        // Check house owner
+        let owner = await HouseOwerModel.findOne({ email });
+
+        if (owner) {
+            return res.status(200).json({ user: owner, role: "owner" });
+        }
+
+        return res.status(404).json({ message: "No user found with this email" });
+
     } catch (error) {
-        console.log('====================================');
-        console.log(error);
-        console.log('====================================');
+        console.error(error);
+        res.status(500).json({ message: "Internal server error" });
     }
-})
+});
 
 
 export default router;
