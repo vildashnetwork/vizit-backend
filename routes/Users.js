@@ -412,7 +412,8 @@ router.get("/me/:email", async (req, res) => {
 router.get("/onlyme/:id", async (req, res) => {
     try {
         const { id } = req.params
-        const getuser = await UserModel.findOne({ id })
+        const getuser = await UserModel.findOne({ _id: id })
+
         if (getuser) {
             res.status(200).json({ getuser })
         } else {
