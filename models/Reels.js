@@ -12,6 +12,10 @@ const ReelsSchema = new mongoose.Schema(
             ref: "User",
             required: true
         },
+        email: {
+            type: String,
+            required: true
+        },
 
         caption: {
             type: String,

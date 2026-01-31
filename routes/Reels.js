@@ -16,9 +16,10 @@ router.post("/post/reel", async (req, res) => {
             caption,
             videoUrl,
             avatar,
+            email
         } = req.body;
 
-        if (!username || !postownerId || !caption || !videoUrl || !avatar) {
+        if (!username || !postownerId || !caption || !videoUrl || !avatar || !email) {
             return res.status(400).json({
                 message: "All required fields must be provided"
             });
@@ -29,7 +30,8 @@ router.post("/post/reel", async (req, res) => {
             postownerId,
             caption,
             videoUrl,
-            avatar
+            avatar,
+            email
         });
 
         const savedReel = await savedata.save();
@@ -301,7 +303,17 @@ router.get("/reel/:id", async (req, res) => {
     }
 });
 
+router.delete("/", async (req, res) => {
+    try {
+        await Reels.deleteMany();
+        res.status(200).json({ message: "deleted sucessfully" })
 
+    } catch (error) {
+        console.log('====================================');
+        console.log(error);
+        console.log('====================================');
+    }
+})
 export default router;
 
 
