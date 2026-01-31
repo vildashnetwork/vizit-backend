@@ -381,4 +381,21 @@ router.put("/add/chat/id/:id", async (req, res) => {
 });
 
 
+router.get("me/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = UserModel.find(id)
+        if (user) {
+            res.status(200).json({ user })
+        } else {
+            res.status(404).json({ message: "no user found with this ID" })
+        }
+    } catch (error) {
+        console.log('====================================');
+        console.log(error);
+        console.log('====================================');
+    }
+})
+
+
 export default router;
