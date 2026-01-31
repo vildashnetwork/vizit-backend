@@ -30,7 +30,7 @@ router.post("/houses/review/post/:id", async (req, res) => {
     const { id } = req.params;
     const { reviewdata } = req.body;
     try {
-        const house = await HouseModel.findById(id);
+        const house = await HouseModel.findById(id).sort({ createdAt: -1 });;
         if (!house) {
             return res.status(404).json({ message: "House not found" });
         }
@@ -428,7 +428,7 @@ router.get("/houses/:id", async (req, res) => {
     }
 
     try {
-        const house = await HouseModel.findById(id).sort({ createdAt: -1 });;
+        const house = await HouseModel.findById(id).sort({ createdAt: -1 });
         if (!house) {
             return res.status(404).json({ message: "House not found" });
         }
