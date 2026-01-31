@@ -1,0 +1,190 @@
+// import express from "express";
+// import cors from "cors";
+// import helmet from "helmet";
+// import morgan from "morgan";
+// import mongoose from "mongoose";
+// import env from "dotenv";
+// // import cron from "node-cron";
+// // import fetch from "node-fetch";
+// import ownerroute from "./routes/OwnersLogin.js";
+// import userroute from "./routes/Users.js";
+// import house from "./routes/house.js";
+// import { app, httpServer } from "./socket.js";
+// import reels from './routes/Reels.js'
+// import like from "./routes/likecomment.js"
+// import messaging from "./routes/message.route.js";
+// import allcalls from "./routes/calling.js"
+
+
+// env.config();
+
+// // Middleware
+// app.use(helmet());
+// app.use(morgan(":method :url :status :response-time ms - :res[content-length]"));
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: true }));
+
+// // CORS configuration
+// const allowedOrigins = [
+//     "http://localhost:5173",
+//     "https://vizit-seven.vercel.app",
+//     "http://localhost:5174",
+// ];
+
+// app.use(
+//     cors({
+//         origin(origin, callback) {
+//             if (!origin || allowedOrigins.includes(origin)) {
+//                 callback(null, true);
+//             } else {
+//                 callback(new Error("Not allowed by CORS"));
+//             }
+//         },
+//         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//         credentials: true,
+//     })
+// );
+
+// // Routes
+// app.use("/api/owner", ownerroute);
+// app.use("/api/user", userroute);
+// app.use("/api/house", house);
+// app.use("/api/reels", reels)
+// app.use("/api/like", like)
+// app.use("/api/messages", messaging);
+// app.use("/api/call", allcalls);
+
+// app.get("/", (_req, res) => {
+//     res.send("server is on");
+// });
+
+// // Keep server alive
+// // const URL = "http://localhost:6300/ping";
+// // function scheduleRandomPing() {
+// //     const minutes = Math.floor(Math.random() * 11) + 5;
+// //     cron.schedule(`*/${minutes} * * * *`, async () => {
+// //         try {
+// //             await fetch(URL);
+// //             console.log("pinged");
+// //         } catch (e) {
+// //             console.error("ping failed", e.message);
+// //         }
+// //     });
+// // }
+// // scheduleRandomPing();
+
+// // Database connection
+// const connectDb = async () => {
+//     try {
+//         await mongoose.connect(process.env.MONGODB_URI);
+//         console.log("database connected successfully!!");
+//     } catch (err) {
+//         console.error("error connecting to the database:", err);
+//     }
+// };
+
+// // Start server
+// const PORT = process.env.PORT || 6300;
+
+// connectDb().then(() => {
+//     httpServer.listen(PORT, () => {
+//         console.log(`server running on http://127.0.0.1:${PORT}`);
+//     });
+// });
+
+
+
+
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import mongoose from "mongoose";
+import env from "dotenv";
+import { app, httpServer } from "./socket.js";
+
+// Route Imports
+import ownerroute from "./routes/OwnersLogin.js";
+import userroute from "./routes/Users.js";
+import house from "./routes/house.js";
+import reels from './routes/Reels.js';
+import like from "./routes/likecomment.js";
+import messaging from "./routes/message.route.js";
+import allcalls from "./routes/calling.js";
+import apointment from "./routes/apoitment.js";
+import video from "./routes/video.js";
+
+env.config();
+
+
+
+// --- 1. MANUAL CORS OVERRIDE (USE THIS INSTEAD OF THE CORS PACKAGE) ---
+// app.use((req, res, next) => {
+//     const allowedOrigins = [
+//         "http://localhost:5173",
+//         "http://localhost:5174",
+//         "https://vizit-seven.vercel.app"
+//     ];
+//     const origin = req.headers.origin;
+
+//     if (allowedOrigins.includes(origin)) {
+//         // This explicitly sets the origin instead of '*'
+//         res.setHeader('Access-Control-Allow-Origin', origin);
+//     }
+
+//     res.setHeader('Access-Control-Allow-Credentials', 'true');
+//     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+//     res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+//     // Handle the Preflight (OPTIONS) request immediately
+//     if (req.method === 'OPTIONS') {
+//         return res.status(200).json({});
+//     }
+
+//     next();
+// });
+
+// --- 2. SECURITY & OTHER MIDDLEWARE ---
+app.use(
+    helmet({
+        // This setting is essential to allow cross-origin requests
+        crossOriginResourcePolicy: { policy: "cross-origin" },
+    })
+);
+app.use(morgan(":method :url :status :response-time ms - :res[content-length]"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// --- 3. ROUTES ---
+app.use("/api/owner", ownerroute);
+app.use("/api/user", userroute);
+app.use("/api/house", house);
+app.use("/api/reels", reels);
+app.use("/api/like", like);
+app.use("/api/messages", messaging);
+app.use("/api/call", allcalls);
+app.use("/api/apointment", apointment);
+app.use("/api/video", video);
+
+app.get("/", (_req, res) => {
+    res.send("server is on");
+});
+
+// --- 4. DATABASE CONNECTION ---
+const connectDb = async () => {
+    try {
+        await mongoose.connect(process.env.MONGODB_URI);
+        console.log("database connected successfully!!");
+    } catch (err) {
+        console.error("error connecting to the database:", err);
+    }
+};
+
+// --- 5. START SERVER ---
+const PORT = process.env.PORT || 6300;
+
+connectDb().then(() => {
+    httpServer.listen(PORT, () => {
+        console.log(`server running on port ${PORT}`);
+    });
+});
