@@ -409,4 +409,21 @@ router.get("/me/:email", async (req, res) => {
 });
 
 
+router.get("onlyme/:id/", async (req, res) => {
+    try {
+        const { id } = req.params
+        const getuser = await UserModel.findOne({ id })
+        if (getuser) {
+            res.status(200).json({ getuser })
+        } else {
+            res.status(404).json({ message: "user not found" })
+        }
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "internal server error" })
+    }
+})
+
+
 export default router;
