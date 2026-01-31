@@ -39,7 +39,7 @@ router.put("/:id", async (req, res) => {
 // Get all appointments
 router.get("/", async (req, res) => {
     try {
-        const apoitments = await Apoitment.find();
+        const apoitments = await Apoitment.find().sort({ createdAt: -1 });
         res.status(200).json(apoitments);
     } catch (err) {
         res.status(500).json(err);
@@ -48,7 +48,7 @@ router.get("/", async (req, res) => {
 //get apointment by owners id
 router.get("/owner/:ownerID", async (req, res) => {
     try {
-        const apoitments = await Apoitment.find({ ownerID: req.params.ownerID });
+        const apoitments = await Apoitment.find({ ownerID: req.params.ownerID }).sort({ createdAt: -1 });
         res.status(200).json(apoitments);
     } catch (err) {
         res.status(500).json(err);
@@ -58,7 +58,7 @@ router.get("/owner/:ownerID", async (req, res) => {
 //get apointment by user id
 router.get("/user/:userID", async (req, res) => {
     try {
-        const apoitments = await Apoitment.find({ userID: req.params.userID });
+        const apoitments = await Apoitment.find({ userID: req.params.userID }).sort({ createdAt: -1 });
         res.status(200).json(apoitments);
     } catch (err) {
         res.status(500).json(err);
