@@ -381,22 +381,21 @@ router.put("/add/chat/id/:id", async (req, res) => {
     }
 });
 
-
 router.get("/me/:email", async (req, res) => {
     try {
         const { email } = req.params;
 
         // Check normal user
-        let user = await UserModel.findOne({ email });
-
+        let user = await UserModel.findOne({ email }).lean(); // convert to plain JS object
         if (user) {
+            delete user.password; // remove sensitive field
             return res.status(200).json({ user, role: "user" });
         }
 
         // Check house owner
-        let owner = await HouseOwerModel.findOne({ email });
-
+        let owner = await HouseOwerModel.findOne({ email }).lean(); // convert to plain JS object
         if (owner) {
+            delete owner.password; // remove sensitive field
             return res.status(200).json({ user: owner, role: "owner" });
         }
 
@@ -407,6 +406,7 @@ router.get("/me/:email", async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
 
 
 router.get("/onlyme/:id", async (req, res) => {
