@@ -6,10 +6,10 @@ import HouseOwerModel from "../models/HouseOwners.js";
 
 dotenv.config()
 const router = express.Router()
+const API_KEY = process.env.API_KEY
 
 console.log("API KEY LOADED:", API_KEY ? "YES" : "NO");
 
-const API_KEY = process.env.API_KEY
 
 
 
