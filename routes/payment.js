@@ -8,7 +8,7 @@ dotenv.config();
 const router = express.Router();
 
 const API_KEY = process.env.API_KEY;
-const BASE_URL = process.env.NKWA_BASE_URL; // Make sure this is set in your .env
+const BASE_URL = process.env.NKWA_BASE_URL; // Your NKWA base URL
 
 console.log("API KEY LOADED:", API_KEY ? "YES" : "NO");
 console.log("BASE_URL LOADED:", BASE_URL ? "YES" : "NO");
@@ -17,7 +17,7 @@ console.log("BASE_URL LOADED:", BASE_URL ? "YES" : "NO");
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
-    // Input validation
+    // 1️⃣ Input validation
     if (!phoneNumber || !amount || !id || !role) {
         return res.status(400).json({ message: "Missing required fields" });
     }
@@ -26,8 +26,8 @@ router.post("/pay", async (req, res) => {
         return res.status(400).json({ message: "Invalid Cameroon phone number" });
     }
 
-    if (Number(amount) < 100) {
-        return res.status(400).json({ message: "Minimum payment is 100 FCFA" });
+    if (Number(amount) < 50) {
+        return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
     }
 
     if (!API_KEY || !BASE_URL) {
@@ -35,7 +35,7 @@ router.post("/pay", async (req, res) => {
     }
 
     try {
-        // Call NKWA API
+        // 2️⃣ Initiate the payment (user gets MTN pop-up)
         const response = await axios.post(
             `${BASE_URL}/collect`,
             {
@@ -51,24 +51,32 @@ router.post("/pay", async (req, res) => {
             }
         );
 
-        // Update MongoDB
+        // 3️⃣ Save as pending in MongoDB
         const Model = role === "owner" ? HouseOwerModel : UserModel;
+        const transactionData = {
+            ...response.data,
+            status: "pending", // important: pending until confirmed by MTN
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
         const updatedUser = await Model.findOneAndUpdate(
             { _id: id },
-            { $push: { paymentprscribtion: response.data } },
+            { $push: { paymentprscribtion: transactionData } },
             { new: true, upsert: true }
         );
 
-        // Send success response
-        res.status(201).json({
-            message: "Payment successful",
-            payment: response.data,
+        // 4️⃣ Send response to frontend (payment initiated)
+        res.status(200).json({
+            message: "Payment initiated. Waiting for user confirmation.",
+            transaction: transactionData,
             user: updatedUser
         });
+
     } catch (err) {
         console.error("NKWA ERROR:", err.response?.data || err.message);
         res.status(err.response?.status || 500).json({
-            message: "Payment failed",
+            message: "Payment initiation failed",
             error: err.response?.data || err.message
         });
     }
