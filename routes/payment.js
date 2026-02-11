@@ -8,20 +8,15 @@ dotenv.config();
 const router = express.Router();
 
 const API_KEY = process.env.API_KEY;
-const BASE_URL = process.env.NKWA_BASE_URL; // Your NKWA base URL
-
-console.log("API KEY LOADED:", API_KEY ? "YES" : "NO");
-console.log("BASE_URL LOADED:", BASE_URL ? "YES" : "NO");
+const BASE_URL = process.env.NKWA_BASE_URL;
 
 /* -------------------- POST /pay -------------------- */
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
-    // 1️⃣ Input validation
     if (!phoneNumber || !amount || !id || !role) {
         return res.status(400).json({ message: "Missing required fields" });
     }
-    
 
     if (!/^2376\d{8}$/.test(phoneNumber)) {
         return res.status(400).json({ message: "Invalid Cameroon phone number" });
@@ -31,13 +26,9 @@ router.post("/pay", async (req, res) => {
         return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
     }
 
-    if (!API_KEY || !BASE_URL) {
-        return res.status(500).json({ message: "Server misconfiguration: API_KEY or BASE_URL missing" });
-    }
-
     try {
-        // 2️⃣ Initiate the payment (user gets MTN pop-up)
-        const response = await axios.post(
+        // 1️⃣ Initiate payment
+        const initiate = await axios.post(
             `${BASE_URL}/collect`,
             {
                 amount: Number(amount),
@@ -52,31 +43,65 @@ router.post("/pay", async (req, res) => {
             }
         );
 
-        // 3️⃣ Save as pending in MongoDB
-        const Model = role === "owner" ? HouseOwerModel : UserModel;
-        const transactionData = {
-            ...response.data,
-            status: "pending", // important: pending until confirmed by MTN
-            createdAt: new Date(),
-            updatedAt: new Date()
-        };
+        const nkwaData = initiate.data;
 
-        const updatedUser = await Model.findOneAndUpdate(
+        const Model = role === "owner" ? HouseOwerModel : UserModel;
+
+        // 2️⃣ Save as pending
+        await Model.updateOne(
             { _id: id },
-            { $push: { paymentprscribtion: transactionData } },
-            { new: true, upsert: true }
+            {
+                $push: {
+                    paymentprscribtion: {
+                        ...nkwaData,
+                        nkwaTransactionId: nkwaData.id,
+                        status: "pending"
+                    }
+                }
+            }
         );
 
-        // 4️⃣ Send response to frontend (payment initiated)
-        res.status(200).json({
-            message: "Payment initiated. Waiting for user confirmation.",
-            transaction: transactionData,
-            user: updatedUser
+        // 3️⃣ Wait 10 seconds then verify payment
+        setTimeout(async () => {
+            try {
+                const verify = await axios.get(
+                    `${BASE_URL}/payments/${nkwaData.id}`,
+                    {
+                        headers: { "X-API-Key": API_KEY }
+                    }
+                );
+
+                const finalStatus = verify.data.status;
+
+                // 4️⃣ Update transaction status
+                await Model.updateOne(
+                    {
+                        _id: id,
+                        "paymentprscribtion.nkwaTransactionId": nkwaData.id
+                    },
+                    {
+                        $set: {
+                            "paymentprscribtion.$.status": finalStatus,
+                            "paymentprscribtion.$.updatedAt": new Date()
+                        }
+                    }
+                );
+
+                console.log("Payment verified:", finalStatus);
+
+            } catch (error) {
+                console.error("Verification failed:", error.message);
+            }
+        }, 10000); // 10 seconds delay
+
+        return res.status(200).json({
+            message: "Payment initiated. Awaiting confirmation.",
+            transactionId: nkwaData.id
         });
 
     } catch (err) {
-        console.error("NKWA ERROR:", err.response?.data || err.message);
-        res.status(err.response?.status || 500).json({
+        console.error("Payment error:", err.response?.data || err.message);
+        return res.status(500).json({
             message: "Payment initiation failed",
             error: err.response?.data || err.message
         });
