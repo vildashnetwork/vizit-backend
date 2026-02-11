@@ -21,6 +21,7 @@ router.post("/pay", async (req, res) => {
     if (!phoneNumber || !amount || !id || !role) {
         return res.status(400).json({ message: "Missing required fields" });
     }
+    
 
     if (!/^2376\d{8}$/.test(phoneNumber)) {
         return res.status(400).json({ message: "Invalid Cameroon phone number" });

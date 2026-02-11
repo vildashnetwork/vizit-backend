@@ -22,14 +22,12 @@ const payment = new mongoose.Schema({
         index: true
     },
 
-
     userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "user",
         required: true,
         index: true
     },
-
 
     amount: {
         type: Number,
@@ -52,7 +50,6 @@ const payment = new mongoose.Schema({
         default: true
     },
 
-
     phoneNumber: {
         type: String,
         required: true,
@@ -65,7 +62,6 @@ const payment = new mongoose.Schema({
         lowercase: true,
         index: true
     },
-
 
     status: {
         type: String,
@@ -92,15 +88,15 @@ const payment = new mongoose.Schema({
         type: Date
     },
 
-
     rawResponse: {
         type: mongoose.Schema.Types.Mixed
     }
 },
-    {
-        timestamps: true
-    }
+{
+    timestamps: true
+}
 )
+
 
 
 const User = new mongoose.Schema({
@@ -115,12 +111,11 @@ const User = new mongoose.Schema({
     },
     email: {
         type: String,
-        default: "",
-        // unique: true
+        default: ""
     },
     profile: {
         type: String,
-        defualt: ""
+        default: "" // fixed typo
     },
     password: {
         type: String,
@@ -147,12 +142,55 @@ const User = new mongoose.Schema({
         enum: ["seeker", "owner"],
         default: "seeker"
     },
-    paymentprscribtion: payment,
+
+    totalBalance: {
+        type: Number,
+        default: 0
+    },
+
+    // allow multiple transactions
+    paymentprscribtion: [payment],
 
 },
-    { timestamps: true }
+{ timestamps: true }
 )
 
+
+
 const UserModel = mongoose.model("user", User)
+
+
+
+/* =========================
+   AUTO BALANCE UPDATE
+========================= */
+
+payment.post("findOneAndUpdate", async function (doc) {
+    if (!doc) return;
+
+    try {
+        const update = this.getUpdate();
+        const newStatus =
+            update?.status ||
+            update?.$set?.status;
+
+        // only act if status is being changed to success
+        if (newStatus !== "success") return;
+
+        // prevent double increment
+        const previousDoc = await this.model.findOne(this.getQuery());
+        if (previousDoc?.status === "success") return;
+
+        await UserModel.updateOne(
+            { _id: doc.userId },
+            { $inc: { totalBalance: doc.amount } } 
+        );
+
+    } catch (error) {
+        console.error("Balance update failed:", error);
+    }
+});
+
+
 
 export default UserModel
