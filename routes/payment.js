@@ -92,7 +92,7 @@ router.post("/pay", async (req, res) => {
             } catch (error) {
                 console.error("Verification failed:", error.message);
             }
-        }, 10000); // 10 seconds delay
+        }, 40000); // 10 seconds delay
 
         return res.status(200).json({
             message: "Payment initiated. Awaiting confirmation.",
