@@ -195,6 +195,24 @@ const HouseOwners = new mongoose.Schema(
         allchatsId: {
             type: Array,
             default: []
+        },
+
+        //  verification
+        verified:{
+            type: Boolean,
+            defualt: false
+        },
+        verificationbalance:{
+            type: Number,
+            defualt: 0
+        },
+        dateofverification:{
+            type: Date,
+            defualt: ""
+        },
+        verificationexpirydate:{
+            type: Date,
+            defualt: ""
         }
     },
     { timestamps: true }

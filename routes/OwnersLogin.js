@@ -146,29 +146,42 @@ router.post("/login", async (req, res) => {
 
 router.get("/decode/token/owner", async (req, res) => {
     try {
-        // call decode helper with the full request so it can check body, headers or cookies
         const result = decodeTokenFromReq(req);
 
         if (!result || !result.ok) {
-            return res.status(result && result.status ? result.status : 401).json({ message: result && result.message ? result.message : "Failed to decode token" });
+            return res.status(result?.status || 401).json({
+                message: result?.message || "Failed to decode token"
+            });
         }
 
-
-        //find the owner by id from payload
         const owner = await HouseOwerModel.findById(result.payload.id);
+
         if (!owner) {
             return res.status(404).json({ message: "Owner not found" });
         }
 
+        
+        if (
+            owner.verified &&
+            owner.verificationexpirydate &&
+            new Date() > owner.verificationexpirydate
+        ) {
+            owner.verified = false;
+            owner.verificationbalance = 0;
+            owner.dateofverification = null;
+            owner.verificationexpirydate = null;
+
+            await owner.save();
+        }
 
         return res.status(200).json({ res: owner });
-
 
     } catch (error) {
         console.error("Token decode error:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
 
 router.delete("/delete", async (req, res) => {
     try {

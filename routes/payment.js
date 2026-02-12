@@ -323,4 +323,72 @@ router.post("/credit-user/:email", async (req, res) => {
 });
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+router.post("/activate-verification/:email", async (req, res) => {
+    try {
+        const { months } = req.body;
+        const { email } = req.params;
+
+        if (!months || months < 1) {
+            return res.status(400).json({ message: "Invalid months selected" });
+        }
+
+        const baseFee = 50;
+        const monthlyFee = 50;
+
+        const totalCost = baseFee + (months * monthlyFee);
+
+        const user = await HouseOwerModel.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (user.totalBalance < totalCost) {
+            return res.status(400).json({
+                message: "Insufficient balance"
+            });
+        }
+
+        // Calculate expiry date
+        const now = new Date();
+        const expiry = new Date();
+        expiry.setMonth(expiry.getMonth() + months);
+
+        // Deduct balance & activate
+        user.totalBalance -= totalCost;
+        user.verified = true;
+        user.verificationbalance = months;
+        user.dateofverification = now;
+        user.verificationexpirydate = expiry;
+
+        await user.save();
+
+        res.status(200).json({
+            message: "Verification activated successfully",
+            expiry,
+            remainingBalance: user.totalBalance
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+
 export default router;

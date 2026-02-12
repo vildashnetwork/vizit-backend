@@ -397,6 +397,21 @@ router.get("/me/:email", async (req, res) => {
         if (owner) {
             delete owner.password; // remove sensitive field
             return res.status(200).json({ user: owner, role: "owner" });
+
+
+             if (
+            owner.verified &&
+            owner.verificationexpirydate &&
+            new Date() > owner.verificationexpirydate
+        ) {
+            owner.verified = false;
+            owner.verificationbalance = 0;
+            owner.dateofverification = null;
+            owner.verificationexpirydate = null;
+
+            await owner.save();
+        }
+
         }
 
         return res.status(404).json({ message: "No user found with this email" });
