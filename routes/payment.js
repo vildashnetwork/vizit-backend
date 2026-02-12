@@ -10,6 +10,9 @@ const router = express.Router();
 const API_KEY = process.env.API_KEY;
 const BASE_URL = process.env.NKWA_BASE_URL; // https://api.pay.staging.mynkwa.com
 
+
+
+
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
@@ -25,88 +28,70 @@ router.post("/pay", async (req, res) => {
         return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
     }
 
-    const Model = role === "owner" ? HouseOwnerModel : UserModel;
-
     try {
+        const Model = role === "owner" ? HouseOwnerModel : UserModel;
 
-        // 1️⃣ Create temporary local transaction FIRST
-        const tempTransaction = {
-            nkwaTransactionId: null,
-            internalRef: null,
-            merchantId: null,
-            amount: Number(amount),
-            currency: "XAF",
-            fee: 0,
-            merchantPaidFee: true,
-            phoneNumber,
-            telecomOperator: "mtn",
-            status: "pending",
-            paymentType: "collection",
-            description: description || "collection",
-            createdAt: new Date(),
-            updatedAt: new Date()
+        // 🔹 Call NKWA FIRST
+        const response = await axios.post(
+            `${BASE_URL}/collect`,
+            {
+                amount: Number(amount),
+                phoneNumber,
+                description: description || "collection"
+            },
+            {
+                headers: {
+                    "X-API-Key": API_KEY,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        const nkwaData = response.data;
+
+        // 🚨 Extra safety check
+        if (!nkwaData?.id) {
+            return res.status(500).json({
+                message: "NKWA did not return transaction ID"
+            });
+        }
+
+        const transaction = {
+            nkwaTransactionId: nkwaData.id,
+            internalRef: nkwaData.internalRef,
+            merchantId: nkwaData.merchantId,
+            amount: nkwaData.amount,
+            currency: nkwaData.currency,
+            fee: nkwaData.fee,
+            merchantPaidFee: nkwaData.merchantPaidFee,
+            phoneNumber: nkwaData.phoneNumber,
+            telecomOperator: nkwaData.telecomOperator,
+            status: nkwaData.status || "pending",
+            paymentType: nkwaData.paymentType,
+            description: nkwaData.description
         };
 
-        const user = await Model.findById(id);
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        user.paymentprscribtion.push(tempTransaction);
-        await user.save();
-
-        // Get the just-created transaction (last one)
-        const transaction =
-            user.paymentprscribtion[user.paymentprscribtion.length - 1];
-
-        // 2️⃣ Now call NKWA
-        try {
-            const response = await axios.post(
-                `${BASE_URL}/collect`,
-                {
-                    amount: Number(amount),
-                    phoneNumber,
-                    description: description || "collection"
-                },
-                {
-                    headers: {
-                        "X-API-Key": API_KEY,
-                        "Content-Type": "application/json"
-                    }
-                }
-            );
-
-            const nkwaData = response.data;
-
-            // 3️⃣ Update transaction with NKWA data
-            transaction.nkwaTransactionId = nkwaData.id;
-            transaction.internalRef = nkwaData.internalRef;
-            transaction.merchantId = nkwaData.merchantId;
-            transaction.fee = nkwaData.fee;
-            transaction.status = nkwaData.status || "pending";
-            transaction.rawResponse = nkwaData;
-            transaction.updatedAt = new Date();
-
-            await user.save();
-
-        } catch (nkwaError) {
-            console.error("NKWA error:", nkwaError.response?.data || nkwaError.message);
-            // Transaction stays pending
-        }
+        await Model.findByIdAndUpdate(
+            id,
+            { $push: { paymentprscribtion: transaction } },
+            { new: true }
+        );
 
         return res.status(201).json({
-            message: "Payment recorded. Status pending.",
+            message: "Payment initiated successfully",
             transaction
         });
 
     } catch (err) {
-        console.error("Payment error:", err.message);
+        console.error("Payment process failed:", err.response?.data || err.message);
+
         return res.status(500).json({
             message: "Payment process failed",
-            error: err.message
+            error: err.response?.data || err.message
         });
     }
 });
+
 
 
 
