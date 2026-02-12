@@ -198,22 +198,23 @@ const HouseOwners = new mongoose.Schema(
         },
 
         //  verification
-        verified:{
-            type: Boolean,
-            defualt: false
-        },
-        verificationbalance:{
-            type: Number,
-            defualt: 0
-        },
-        dateofverification:{
-            type: Date,
-            defualt: ""
-        },
-        verificationexpirydate:{
-            type: Date,
-            defualt: ""
-        }
+      verified: {
+    type: Boolean,
+    default: false
+},
+verificationbalance: {
+    type: Number,
+    default: 0
+},
+dateofverification: {
+    type: Date,
+    default: null
+},
+verificationexpirydate: {
+    type: Date,
+    default: null
+}
+
     },
     { timestamps: true }
 );
