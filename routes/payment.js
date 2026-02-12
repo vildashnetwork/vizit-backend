@@ -352,7 +352,7 @@ router.post("/activate-verification/:email", async (req, res) => {
 
         const totalCost = baseFee + (months * monthlyFee);
 
-        const user = await HouseOwerModel.findOne({ email });
+        const user = await HouseOwnerModel.findOne({ email });
 
         if (!user) {
             return res.status(404).json({ message: "User not found" });
