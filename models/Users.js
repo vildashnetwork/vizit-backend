@@ -170,35 +170,7 @@ const UserModel = mongoose.model("user", User)
 
 
 
-/* =========================
-   AUTO BALANCE UPDATE
-========================= */
 
-payment.post("findOneAndUpdate", async function (doc) {
-    if (!doc) return;
-
-    try {
-        const update = this.getUpdate();
-        const newStatus =
-            update?.status ||
-            update?.$set?.status;
-
-        // only act if status is being changed to success
-        if (newStatus !== "success") return;
-
-        // prevent double increment
-        const previousDoc = await this.model.findOne(this.getQuery());
-        if (previousDoc?.status === "success") return;
-
-        await UserModel.updateOne(
-            { _id: doc.userId },
-            { $inc: { totalBalance: doc.amount } }
-        );
-
-    } catch (error) {
-        console.error("Balance update failed:", error);
-    }
-});
 
 
 

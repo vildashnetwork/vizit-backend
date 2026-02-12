@@ -202,32 +202,5 @@ const HouseOwners = new mongoose.Schema(
 
 const HouseOwerModel = mongoose.model("houseowner", HouseOwners);
 
-payment.post("findOneAndUpdate", async function (doc) {
-    if (!doc) return;
-
-    try {
-        const update = this.getUpdate();
-
-        const newStatus =
-            update?.status ||
-            update?.$set?.status;
-
-        // only act if status is being changed to success
-        if (newStatus !== "success") return;
-
-        // prevent double increment
-        const previousDoc = await this.model.findOne(this.getQuery());
-        if (previousDoc?.status === "success") return;
-
-        // increment balance of house owner
-        await mongoose.model("houseowner").updateOne(
-            { _id: doc.userId },
-            { $inc: { totalBalance: doc.amount } }
-        );
-
-    } catch (error) {
-        console.error("Balance update failed:", error);
-    }
-});
 
 export default HouseOwerModel;

@@ -10,9 +10,6 @@ const router = express.Router();
 const API_KEY = process.env.API_KEY;
 const BASE_URL = process.env.NKWA_BASE_URL; // https://api.pay.staging.mynkwa.com
 
-/* =========================================================
-   1️⃣ INITIATE PAYMENT (Creates Pending Transaction)
-========================================================= */
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
@@ -28,129 +25,88 @@ router.post("/pay", async (req, res) => {
         return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
     }
 
+    const Model = role === "owner" ? HouseOwnerModel : UserModel;
+
     try {
-        const response = await axios.post(
-            `${BASE_URL}/collect`,
-            {
-                amount: Number(amount),
-                phoneNumber,
-                description: description || "collection"
-            },
-            {
-                headers: {
-                    "X-API-Key": API_KEY,
-                    "Content-Type": "application/json"
-                }
-            }
-        );
 
-        const nkwaData = response.data;
-
-        const Model = role === "owner" ? HouseOwnerModel : UserModel;
-
-        const transaction = {
-            nkwaTransactionId: nkwaData.id, // VERY IMPORTANT
-            internalRef: nkwaData.internalRef,
-            merchantId: nkwaData.merchantId,
-            amount: nkwaData.amount,
-            currency: nkwaData.currency,
-            fee: nkwaData.fee,
-            merchantPaidFee: nkwaData.merchantPaidFee,
-            phoneNumber: nkwaData.phoneNumber,
-            telecomOperator: nkwaData.telecomOperator,
+        // 1️⃣ Create temporary local transaction FIRST
+        const tempTransaction = {
+            nkwaTransactionId: null,
+            internalRef: null,
+            merchantId: null,
+            amount: Number(amount),
+            currency: "XAF",
+            fee: 0,
+            merchantPaidFee: true,
+            phoneNumber,
+            telecomOperator: "mtn",
             status: "pending",
-            paymentType: nkwaData.paymentType,
-            description: nkwaData.description,
+            paymentType: "collection",
+            description: description || "collection",
             createdAt: new Date(),
             updatedAt: new Date()
         };
 
-        await Model.findByIdAndUpdate(
-            id,
-            { $push: { paymentprscribtion: transaction } },
-            { new: true }
-        );
+        const user = await Model.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        user.paymentprscribtion.push(tempTransaction);
+        await user.save();
+
+        // Get the just-created transaction (last one)
+        const transaction =
+            user.paymentprscribtion[user.paymentprscribtion.length - 1];
+
+        // 2️⃣ Now call NKWA
+        try {
+            const response = await axios.post(
+                `${BASE_URL}/collect`,
+                {
+                    amount: Number(amount),
+                    phoneNumber,
+                    description: description || "collection"
+                },
+                {
+                    headers: {
+                        "X-API-Key": API_KEY,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+            const nkwaData = response.data;
+
+            // 3️⃣ Update transaction with NKWA data
+            transaction.nkwaTransactionId = nkwaData.id;
+            transaction.internalRef = nkwaData.internalRef;
+            transaction.merchantId = nkwaData.merchantId;
+            transaction.fee = nkwaData.fee;
+            transaction.status = nkwaData.status || "pending";
+            transaction.rawResponse = nkwaData;
+            transaction.updatedAt = new Date();
+
+            await user.save();
+
+        } catch (nkwaError) {
+            console.error("NKWA error:", nkwaError.response?.data || nkwaError.message);
+            // Transaction stays pending
+        }
 
         return res.status(201).json({
-            message: "Payment initiated. Waiting for confirmation.",
+            message: "Payment recorded. Status pending.",
             transaction
         });
 
     } catch (err) {
-        console.error("Payment initiation error:", err.response?.data || err.message);
+        console.error("Payment error:", err.message);
         return res.status(500).json({
-            message: "Payment initiation failed",
-            error: err.response?.data || err.message
+            message: "Payment process failed",
+            error: err.message
         });
     }
 });
-
-
-/* =========================================================
-   2️⃣ WEBHOOK (AUTO UPDATE STATUS + CREDIT BALANCE)
-========================================================= */
-router.post("/nkwa/webhook", async (req, res) => {
-    try {
-        const data = req.body;
-
-        console.log("Webhook received:", data);
-
-        const {
-            id,        // nkwa transaction id
-            status,
-            amount
-        } = data;
-
-        if (!id) return res.status(400).json({ message: "No transaction ID" });
-
-        // Find user with this transaction
-        const user = await UserModel.findOne({
-            "paymentprscribtion.nkwaTransactionId": id
-        }) || await HouseOwnerModel.findOne({
-            "paymentprscribtion.nkwaTransactionId": id
-        });
-
-        if (!user) {
-            console.log("User not found for transaction:", id);
-            return res.status(404).json({ message: "Transaction not found" });
-        }
-
-        const transaction = user.paymentprscribtion.find(
-            t => t.nkwaTransactionId === id
-        );
-
-        if (!transaction) {
-            return res.status(404).json({ message: "Transaction not found inside user" });
-        }
-
-        // 🚫 Prevent double credit
-        if (transaction.status === "success") {
-            return res.status(200).json({ message: "Already processed" });
-        }
-
-        // Update transaction status
-        transaction.status = status;
-        transaction.updatedAt = new Date();
-
-        // 💰 Credit balance ONLY if success
-        if (status === "success") {
-            user.totalBalance += amount;
-        }
-
-        await user.save();
-
-        return res.status(200).json({ message: "Webhook processed successfully" });
-
-    } catch (error) {
-        console.error("Webhook error:", error.message);
-        return res.status(500).json({ message: "Webhook processing failed" });
-    }
-});
-
-
-
-
-
 
 
 
