@@ -16,7 +16,13 @@ const payment = new mongoose.Schema({
         type: String,
         index: true
     },
+   added:{
+    type: String,
+        enum: ["added", "notadded"],
+    default: "notadded"
 
+
+   },
     merchantId: {
         type: Number,
         index: true
@@ -92,9 +98,9 @@ const payment = new mongoose.Schema({
         type: mongoose.Schema.Types.Mixed
     }
 },
-{
-    timestamps: true
-}
+    {
+        timestamps: true
+    }
 )
 
 
@@ -148,11 +154,14 @@ const User = new mongoose.Schema({
         default: 0
     },
 
-    // allow multiple transactions
-    paymentprscribtion: [payment],
+    paymentprscribtion: {
+        type: [payment],
+        default: []
+    },
+
 
 },
-{ timestamps: true }
+    { timestamps: true }
 )
 
 
@@ -183,7 +192,7 @@ payment.post("findOneAndUpdate", async function (doc) {
 
         await UserModel.updateOne(
             { _id: doc.userId },
-            { $inc: { totalBalance: doc.amount } } 
+            { $inc: { totalBalance: doc.amount } }
         );
 
     } catch (error) {

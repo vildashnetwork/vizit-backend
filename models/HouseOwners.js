@@ -8,6 +8,11 @@ const payment = new mongoose.Schema(
             unique: true,
             index: true
         },
+         added:{
+    type: String,
+        enum: ["added", "notadded"],
+       defualt: "notadded"
+   },
 
         internalRef: {
             type: String,
@@ -165,7 +170,11 @@ const HouseOwners = new mongoose.Schema(
             default: "mtnmomo"
         },
 
-        paymentprscribtion: payment,
+        paymentprscribtion: {
+            type: [payment],
+            default: []
+        },
+
 
         Notifications: {
             type: Boolean,
