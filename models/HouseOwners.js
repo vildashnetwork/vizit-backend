@@ -1,14 +1,21 @@
 import mongoose from "mongoose";
+
+/* =========================
+   PAYMENT SUB-SCHEMA
+========================= */
+
 const paymentSchema = new mongoose.Schema(
   {
     nkwaTransactionId: {
       type: String,
       unique: true,
-      sparse: true // prevents index conflict if undefined
+      sparse: true, // prevents unique conflict when undefined
+      trim: true
     },
 
     internalRef: {
-      type: String
+      type: String,
+      trim: true
     },
 
     added: {
@@ -28,7 +35,8 @@ const paymentSchema = new mongoose.Schema(
 
     currency: {
       type: String,
-      default: "XAF"
+      default: "XAF",
+      uppercase: true
     },
 
     fee: {
@@ -42,7 +50,8 @@ const paymentSchema = new mongoose.Schema(
     },
 
     phoneNumber: {
-      type: String
+      type: String,
+      trim: true
     },
 
     telecomOperator: {
@@ -81,127 +90,149 @@ const paymentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-const HouseOwners = new mongoose.Schema(
-    {
-        name: {
-            type: String,
-            required: true
-        },
 
-        email: {
-            type: String,
-            unique: true,
-            required: true
-        },
+/* =========================
+   HOUSE OWNER SCHEMA
+========================= */
 
-        location: {
-            type: String,
-            default: ""
-        },
+const houseOwnerSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
 
-        password: {
-            type: String,
-            required: true
-        },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      index: true
+    },
 
-        companyname: {
-            type: String,
-            required: true
-        },
+    location: {
+      type: String,
+      default: ""
+    },
 
-        bio: {
-            type: String,
-            required: true
-        },
+    password: {
+      type: String,
+      required: true
+    },
 
-        phone: {
-            type: String,
-            unique: true,
-            required: true
-        },
+    companyName: {
+      type: String,
+      required: true,
+      trim: true
+    },
 
-        interest: {
-            type: String,
-            required: true
-        },
+    bio: {
+      type: String,
+      required: true
+    },
 
-        IDno: {
-            type: String,
-            required: true
-        },
+    phone: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      index: true
+    },
 
-        profile: {
-            type: String,
-            default: ""
-        },
+    interest: {
+      type: String,
+      required: true
+    },
 
-        twofactormethod: {
-            type: String,
-            enum: ["email", "sms"],
-            default: "email"
-        },
+    IDno: {
+      type: String,
+      required: true,
+      trim: true
+    },
 
-        enabletwofactor: {
-            type: Boolean,
-            default: false
-        },
+    profile: {
+      type: String,
+      default: ""
+    },
 
-        paymentmethod: {
-            type: String,
-            enum: ["mtnmomo", "orange", "paypal", "creditcard"],
-            default: "mtnmomo"
-        },
+    twoFactorMethod: {
+      type: String,
+      enum: ["email", "sms"],
+      default: "email"
+    },
 
-         paymentprscribtion: {
+    enableTwoFactor: {
+      type: Boolean,
+      default: false
+    },
+
+    paymentMethod: {
+      type: String,
+      enum: ["mtnmomo", "orange", "paypal", "creditcard"],
+      default: "mtnmomo"
+    },
+
+    /* Embedded payments */
+    paymentSubscription: {
       type: [paymentSchema],
       default: []
-    }
-
-
-        Notifications: {
-            type: Boolean,
-            default: true
-        },
-
-        role: {
-            type: String,
-            enum: ["seeker", "owner"],
-            default: "owner"
-        },
-
-        totalBalance: {
-            type: Number,
-            default: 0
-        },
-
-        allchatsId: {
-            type: Array,
-            default: []
-        },
-
-        //  verification
-verified: {
-    type: Boolean,
-    default: false
-},
-verificationbalance: {
-    type: Number,
-    default: 0
-},
-dateofverification: {
-    type: Date,
-    default: null
-},
-verificationexpirydate: {
-    type: Date,
-    default: null
-}
-
     },
-    { timestamps: true }
+
+    notifications: {
+      type: Boolean,
+      default: true
+    },
+
+    role: {
+      type: String,
+      enum: ["owner"],
+      default: "owner"
+    },
+
+    totalBalance: {
+      type: Number,
+      default: 0
+    },
+
+    allChatsId: {
+      type: Array,
+      default: []
+    },
+
+    /* =========================
+       VERIFICATION SYSTEM
+    ========================= */
+
+    verified: {
+      type: Boolean,
+      default: false
+    },
+
+    verificationBalance: {
+      type: Number,
+      default: 0
+    },
+
+    dateOfVerification: {
+      type: Date,
+      default: null
+    },
+
+    verificationExpiryDate: {
+      type: Date,
+      default: null
+    }
+  },
+  { timestamps: true }
 );
 
-const HouseOwerModel = mongoose.model("houseowner", HouseOwners);
 
+/* =========================
+   MODEL EXPORT
+========================= */
 
-export default HouseOwerModel;
+const HouseOwnerModel = mongoose.model("houseowner", houseOwnerSchema);
+
+export default HouseOwnerModel;
