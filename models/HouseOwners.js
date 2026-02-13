@@ -1,102 +1,84 @@
 import mongoose from "mongoose";
-
-const payment = new mongoose.Schema(
-    {
-        nkwaTransactionId: {
-            type: String,
-            required: true,
-            unique: true,
-            index: true
-        },
-         added:{
-    type: String,
-        enum: ["added", "notadded"],
-       defualt: "notadded"
-   },
-
-        internalRef: {
-            type: String,
-            index: true
-        },
-
-        merchantId: {
-            type: Number,
-            index: true
-        },
-
-        userId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: true,
-            index: true
-        },
-
-        amount: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-
-        currency: {
-            type: String,
-            default: "XAF"
-        },
-
-        fee: {
-            type: Number,
-            default: 0
-        },
-
-        merchantPaidFee: {
-            type: Boolean,
-            default: true
-        },
-
-        phoneNumber: {
-            type: String,
-            required: true,
-            index: true
-        },
-
-        telecomOperator: {
-            type: String,
-            enum: ["mtn", "orange"],
-            lowercase: true,
-            index: true
-        },
-
-        status: {
-            type: String,
-            enum: ["pending", "success", "failed", "canceled"],
-            default: "pending",
-            index: true
-        },
-
-        paymentType: {
-            type: String,
-            enum: ["collection", "disbursement"],
-            required: true
-        },
-
-        description: {
-            type: String
-        },
-
-        failureReason: {
-            type: String
-        },
-
-        verifiedAt: {
-            type: Date
-        },
-
-        rawResponse: {
-            type: mongoose.Schema.Types.Mixed
-        }
+const paymentSchema = new mongoose.Schema(
+  {
+    nkwaTransactionId: {
+      type: String,
+      unique: true,
+      sparse: true // prevents index conflict if undefined
     },
-    {
-        timestamps: true
+
+    internalRef: {
+      type: String
+    },
+
+    added: {
+      type: String,
+      enum: ["added", "notadded"],
+      default: "notadded"
+    },
+
+    merchantId: {
+      type: Number
+    },
+
+    amount: {
+      type: Number,
+      min: 0
+    },
+
+    currency: {
+      type: String,
+      default: "XAF"
+    },
+
+    fee: {
+      type: Number,
+      default: 0
+    },
+
+    merchantPaidFee: {
+      type: Boolean,
+      default: true
+    },
+
+    phoneNumber: {
+      type: String
+    },
+
+    telecomOperator: {
+      type: String,
+      enum: ["mtn", "orange"],
+      lowercase: true
+    },
+
+    status: {
+      type: String,
+      enum: ["pending", "success", "failed", "canceled"],
+      default: "pending"
+    },
+
+    paymentType: {
+      type: String,
+      enum: ["collection", "disbursement"]
+    },
+
+    description: {
+      type: String
+    },
+
+    failureReason: {
+      type: String
+    },
+
+    verifiedAt: {
+      type: Date
+    },
+
+    rawResponse: {
+      type: mongoose.Schema.Types.Mixed
     }
+  },
+  { timestamps: true }
 );
 
 const HouseOwners = new mongoose.Schema(
@@ -170,10 +152,10 @@ const HouseOwners = new mongoose.Schema(
             default: "mtnmomo"
         },
 
-        paymentprscribtion: {
-            type: [payment],
-            default: []
-        },
+         paymentprscribtion: {
+      type: [paymentSchema],
+      default: []
+    }
 
 
         Notifications: {
@@ -198,7 +180,7 @@ const HouseOwners = new mongoose.Schema(
         },
 
         //  verification
-      verified: {
+verified: {
     type: Boolean,
     default: false
 },

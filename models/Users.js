@@ -1,177 +1,174 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
+/* =====================================================
+   PAYMENT SUBDOCUMENT (Embedded Inside User)
+===================================================== */
 
-
-
-const payment = new mongoose.Schema({
-
+const paymentSchema = new mongoose.Schema(
+  {
     nkwaTransactionId: {
-        type: String,
-        required: true,
-        unique: true,
-        index: true
+      type: String,
+      unique: true,
+      sparse: true // prevents index conflict if undefined
     },
 
     internalRef: {
-        type: String,
-        index: true
+      type: String
     },
-   added:{
-    type: String,
-        enum: ["added", "notadded"],
-    default: "notadded"
 
+    added: {
+      type: String,
+      enum: ["added", "notadded"],
+      default: "notadded"
+    },
 
-   },
     merchantId: {
-        type: Number,
-        index: true
-    },
-
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "user",
-        required: true,
-        index: true
+      type: Number
     },
 
     amount: {
-        type: Number,
-        required: true,
-        min: 0
+      type: Number,
+      min: 0
     },
 
     currency: {
-        type: String,
-        default: "XAF"
+      type: String,
+      default: "XAF"
     },
 
     fee: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0
     },
 
     merchantPaidFee: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true
     },
 
     phoneNumber: {
-        type: String,
-        required: true,
-        index: true
+      type: String
     },
 
     telecomOperator: {
-        type: String,
-        enum: ["mtn", "orange"],
-        lowercase: true,
-        index: true
+      type: String,
+      enum: ["mtn", "orange"],
+      lowercase: true
     },
 
     status: {
-        type: String,
-        enum: ["pending", "success", "failed", "canceled"],
-        default: "pending",
-        index: true
+      type: String,
+      enum: ["pending", "success", "failed", "canceled"],
+      default: "pending"
     },
 
     paymentType: {
-        type: String,
-        enum: ["collection", "disbursement"],
-        required: true
+      type: String,
+      enum: ["collection", "disbursement"]
     },
 
     description: {
-        type: String
+      type: String
     },
 
     failureReason: {
-        type: String
+      type: String
     },
 
     verifiedAt: {
-        type: Date
+      type: Date
     },
 
     rawResponse: {
-        type: mongoose.Schema.Types.Mixed
+      type: mongoose.Schema.Types.Mixed
     }
-},
-    {
-        timestamps: true
-    }
-)
+  },
+  { timestamps: true }
+);
 
 
+/* =====================================================
+   USER SCHEMA
+===================================================== */
 
-const User = new mongoose.Schema({
+const userSchema = new mongoose.Schema(
+  {
     name: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
+      trim: true
     },
+
     number: {
-        type: String,
-        required: true,
-        unique: true
+      type: String,
+      required: true,
+      unique: true,
+      trim: true
     },
+
     email: {
-        type: String,
-        default: ""
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true
     },
+
     profile: {
-        type: String,
-        default: "" // fixed typo
+      type: String,
+      default: ""
     },
+
     password: {
-        type: String,
-        required: true
+      type: String,
+      required: true
     },
+
     interest: {
-        type: String,
-        required: true
+      type: String,
+      required: true
     },
+
     Notifications: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true
     },
+
     savedHouses: {
-        type: Array,
-        default: []
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "house",
+      default: []
     },
+
     allchatsId: {
-        type: Array,
-        default: []
+      type: [String],
+      default: []
     },
+
     role: {
-        type: String,
-        enum: ["seeker", "owner"],
-        default: "seeker"
+      type: String,
+      enum: ["seeker", "owner"],
+      default: "seeker"
     },
 
     totalBalance: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0
     },
 
     paymentprscribtion: {
-        type: [payment],
-        default: []
-    },
+      type: [paymentSchema],
+      default: []
+    }
+  },
+  { timestamps: true }
+);
 
 
-},
-    { timestamps: true }
-)
+/* =====================================================
+   MODEL EXPORT
+===================================================== */
 
+const UserModel = mongoose.model("user", userSchema);
 
-
-const UserModel = mongoose.model("user", User)
-
-
-
-
-
-
-
-export default UserModel
+export default UserModel;
