@@ -114,7 +114,7 @@ router.post("/register", async (req, res) => {
     } catch (err) {
         console.error("Registration error:", err);
         res.status(500).json({
-            message: "Internal server error",
+            message: err?.message,
         });
     }
 });
