@@ -8,12 +8,11 @@ const paymentSchema = new mongoose.Schema(
   {
     nkwaTransactionId: {
       type: String,
-      trim: true
+      sparse: true
     },
 
     internalRef: {
-      type: String,
-      trim: true
+      type: String
     },
 
     added: {
@@ -33,8 +32,7 @@ const paymentSchema = new mongoose.Schema(
 
     currency: {
       type: String,
-      default: "XAF",
-      uppercase: true
+      default: "XAF"
     },
 
     fee: {
@@ -48,8 +46,7 @@ const paymentSchema = new mongoose.Schema(
     },
 
     phoneNumber: {
-      type: String,
-      trim: true
+      type: String
     },
 
     telecomOperator: {
@@ -172,11 +169,10 @@ const houseOwnerSchema = new mongoose.Schema(
       default: "mtnmomo"
     },
 
-    /* Embedded payments */
-    paymentSubscription: {
+    paymentprscribtion: {
       type: [paymentSchema],
       default: []
-    },
+    }
 
     notifications: {
       type: Boolean,
