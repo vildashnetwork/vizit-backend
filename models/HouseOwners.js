@@ -6,9 +6,11 @@ import mongoose from "mongoose";
 
 const paymentSchema = new mongoose.Schema(
   {
-    nkwaTransactionId: {
+  nkwaTransactionId: {
       type: String,
-      sparse: true
+      unique: true, // Add this
+      sparse: true, // Keep this
+      default: undefined // Best practice for sparse unique indexes in arrays
     },
 
     internalRef: {
@@ -172,7 +174,7 @@ const houseOwnerSchema = new mongoose.Schema(
     paymentprscribtion: {
       type: [paymentSchema],
       default: []
-    }
+    },
 
     notifications: {
       type: Boolean,
