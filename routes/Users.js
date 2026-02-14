@@ -98,9 +98,7 @@ router.post("/register", async (req, res) => {
             password: hashedPassword,
             profile:
                 profile ||
-                `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                    name
-                )}`,
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&size=128`,
         });
 
         const savedUser = await newUser.save();

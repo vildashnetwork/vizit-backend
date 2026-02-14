@@ -76,7 +76,7 @@ router.post("/register", async (req, res) => {
             interest,
             IDno,
             password: hashedPassword,
-            profile: profile || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`
+            profile: profile || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&size=128`
         });
 
 
