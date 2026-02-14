@@ -121,8 +121,7 @@ const houseOwnerSchema = new mongoose.Schema(
 
     companyName: {
       type: String,
-      required: true,
-      trim: true
+      defualt: ""
     },
 
     bio: {
