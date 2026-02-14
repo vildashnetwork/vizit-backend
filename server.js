@@ -110,10 +110,12 @@ mongoose.connection.once('open', async () => {
 
 mongoose.connection.once('open', async () => {
   try {
-    const collection = mongoose.connection.db.collection('houseowner');
-    await collection.dropIndex('paymentprscribtion.nkwaTransactionId_1');
-    console.log("✅ Old duplicate index dropped successfully!");
+    await mongoose.connection.db
+      .collection('houseowners')
+      .dropIndex('paymentprscribtion.nkwaTransactionId_1');
+
+    console.log("✅ Index dropped successfully!");
   } catch (err) {
-    console.log("Note: Index not found or already dropped.");
+    console.log("Index not found or already removed.");
   }
 });
