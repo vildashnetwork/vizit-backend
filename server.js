@@ -95,3 +95,25 @@ connectDb().then(() => {
         console.log(`server running on port ${PORT}`);
     });
 });
+
+// TEMPORARY: Add this to server.js after 'database connected successfully'
+mongoose.connection.once('open', async () => {
+  try {
+    const collection = mongoose.connection.db.collection('users');
+    await collection.dropIndex('paymentprscribtion.nkwaTransactionId_1');
+    console.log("✅ Old duplicate index dropped successfully!");
+  } catch (err) {
+    console.log("Note: Index not found or already dropped.");
+  }
+});
+
+
+mongoose.connection.once('open', async () => {
+  try {
+    const collection = mongoose.connection.db.collection('houseowner');
+    await collection.dropIndex('paymentprscribtion.nkwaTransactionId_1');
+    console.log("✅ Old duplicate index dropped successfully!");
+  } catch (err) {
+    console.log("Note: Index not found or already dropped.");
+  }
+});
