@@ -8,9 +8,6 @@ const paymentSchema = new mongoose.Schema(
   {
   nkwaTransactionId: {
       type: String,
-      unique: true, // Add this
-      sparse: true, // Keep this
-      default: undefined // Best practice for sparse unique indexes in arrays
     },
 
     internalRef: {
