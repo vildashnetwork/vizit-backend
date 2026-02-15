@@ -165,7 +165,7 @@ const userSchema = new mongoose.Schema(
     },
     paytoviewdetailstartdate: {
       type: Date,
-      default: date.now
+      default: null
     },
     paytoviewenddate: {
       type: Date,
