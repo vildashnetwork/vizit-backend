@@ -107,45 +107,126 @@ router.post("/pay", async (req, res) => {
 /* =========================================================
    RECONCILE ALL PENDING PAYMENTS
 ========================================================= */
+// router.get("/reconcile-payments", async (req, res) => {
+//     try {
+//         const results = {
+//             checked: 0,
+//             updated: 0,
+//             credited: 0,
+//             errors: 0
+//         };
+
+//         const models = [
+//             { model: UserModel, name: "User" },
+//             { model: HouseOwnerModel, name: "HouseOwner" }
+//         ];
+
+//         for (const { model } of models) {
+//             // Find users that have at least one pending transaction
+//             const users = await model.find({
+//                 "paymentprscribtion.status": "pending"
+//             });
+
+//             for (const user of users) {
+//                 // Iterate payments safely
+//                 for (const transaction of user.paymentprscribtion || []) {
+//                     if (transaction.status !== "pending") continue;
+
+//                     results.checked++;
+
+//                     try {
+//                         // Fetch latest status from NKWA
+//                         const response = await axios.get(
+//                             `${BASE_URL}/payments/${transaction.nkwaTransactionId}`,
+//                             { headers: { "X-API-Key": API_KEY } }
+//                         );
+
+//                         const nkwaPayment = response.data;
+// console.log(nkwaPayment)
+//                         // Update only if status changed
+//                         if (nkwaPayment.status !== transaction.status) {
+
+//                             const updateQuery = {
+//                                 $set: {
+//                                     "paymentprscribtion.$.status": nkwaPayment.status,
+//                                     "paymentprscribtion.$.updatedAt": new Date(),
+//                                     "paymentprscribtion.$.rawResponse": nkwaPayment
+//                                 }
+//                             };
+
+//                             // Credit balance if success and not already credited
+//                             if (nkwaPayment.status === "success") {
+//                                 updateQuery.$inc = { totalBalance: nkwaPayment.amount };
+//                                 results.credited++;
+//                             }
+
+//                             await model.updateOne(
+//                                 {
+//                                     _id: user._id,
+//                                     "paymentprscribtion._id": transaction._id
+//                                 },
+//                                 updateQuery
+//                             );
+
+//                             results.updated++;
+//                         }
+
+//                     } catch (err) {
+//                         console.error(
+//                             `Failed to verify transaction ${transaction.nkwaTransactionId}`,
+//                             err.response?.data || err.message
+//                         );
+//                         results.errors++;
+//                     }
+//                 }
+//             }
+//         }
+
+//         return res.status(200).json({
+//             message: "Reconciliation complete",
+//             results
+//         });
+
+//     } catch (error) {
+//         console.error("Reconciliation error:", error.message);
+//         return res.status(500).json({
+//             message: "Reconciliation failed",
+//             error: error.message
+//         });
+//     }
+// });
+
+
+
+
+
+
+
+
+
 router.get("/reconcile-payments", async (req, res) => {
     try {
-        const results = {
-            checked: 0,
-            updated: 0,
-            credited: 0,
-            errors: 0
-        };
-
-        const models = [
-            { model: UserModel, name: "User" },
-            { model: HouseOwnerModel, name: "HouseOwner" }
-        ];
+        const results = { checked: 0, updated: 0, credited: 0, errors: 0 };
+        const models = [{ model: UserModel }, { model: HouseOwnerModel }];
 
         for (const { model } of models) {
-            // Find users that have at least one pending transaction
-            const users = await model.find({
-                "paymentprscribtion.status": "pending"
-            });
+            const users = await model.find({ "paymentprscribtion.status": "pending" });
 
             for (const user of users) {
-                // Iterate payments safely
                 for (const transaction of user.paymentprscribtion || []) {
                     if (transaction.status !== "pending") continue;
 
                     results.checked++;
 
                     try {
-                        // Fetch latest status from NKWA
                         const response = await axios.get(
-                            `${BASE_URL}/payments/${transaction.nkwaTransactionId}`,
-                            { headers: { "X-API-Key": API_KEY } }
+                            `${process.env.NKWA_BASE_URL}/payments/${transaction.nkwaTransactionId}`,
+                            { headers: { "X-API-Key": process.env.API_KEY } }
                         );
 
                         const nkwaPayment = response.data;
-console.log(nkwaPayment)
-                        // Update only if status changed
-                        if (nkwaPayment.status !== transaction.status) {
 
+                        if (nkwaPayment.status !== transaction.status) {
                             const updateQuery = {
                                 $set: {
                                     "paymentprscribtion.$.status": nkwaPayment.status,
@@ -154,57 +235,32 @@ console.log(nkwaPayment)
                                 }
                             };
 
-                            // Credit balance if success and not already credited
-                            if (nkwaPayment.status === "success") {
+                            // ONLY credit if it's a new success AND hasn't been added yet
+                            if (nkwaPayment.status === "success" && transaction.added === "notadded") {
                                 updateQuery.$inc = { totalBalance: nkwaPayment.amount };
+                                // CRITICAL: Mark as added so Credit-User doesn't double count it
+                                updateQuery.$set["paymentprscribtion.$.added"] = "added";
+                                updateQuery.$set["paymentprscribtion.$.verifiedAt"] = new Date();
                                 results.credited++;
                             }
 
                             await model.updateOne(
-                                {
-                                    _id: user._id,
-                                    "paymentprscribtion._id": transaction._id
-                                },
+                                { _id: user._id, "paymentprscribtion._id": transaction._id },
                                 updateQuery
                             );
-
                             results.updated++;
                         }
-
                     } catch (err) {
-                        console.error(
-                            `Failed to verify transaction ${transaction.nkwaTransactionId}`,
-                            err.response?.data || err.message
-                        );
                         results.errors++;
                     }
                 }
             }
         }
-
-        return res.status(200).json({
-            message: "Reconciliation complete",
-            results
-        });
-
+        res.status(200).json({ message: "Reconciliation complete", results });
     } catch (error) {
-        console.error("Reconciliation error:", error.message);
-        return res.status(500).json({
-            message: "Reconciliation failed",
-            error: error.message
-        });
+        res.status(500).json({ message: "Reconciliation failed", error: error.message });
     }
 });
-
-
-
-
-
-
-
-
-
-
 
 
 
