@@ -174,10 +174,25 @@ router.get("/decode/token/user", async (req, res) => {
         // return res.status(200).json({ data: result.payload });
         //find user by id from payload
         const user = await UserModel.findById(result.payload.id);
+
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
+
+
+        if (
+            user.haspay &&
+            user.paytoviewenddate &&
+            new Date() > user.paytoviewenddate
+        ) {
+            user.haspay = false;
+            user.paytoviewdetailstartdate = null;
+            user.paytoviewenddate = null;
+
+            await user.save();
+        }
         return res.status(200).json({ user: sanitizeUser(user) });
+
     }
     catch (error) {
         console.error("Token decode error:", error);
@@ -387,29 +402,45 @@ router.get("/me/:email", async (req, res) => {
         let user = await UserModel.findOne({ email }).lean(); // convert to plain JS object
         if (user) {
             delete user.password; // remove sensitive field
+
+             if (
+            user.haspay &&
+            user.paytoviewenddate &&
+            new Date() > user.paytoviewenddate
+        ) {
+            user.haspay = false;
+            user.paytoviewdetailstartdate = null;
+            user.paytoviewenddate = null;
+
+            await user.save();
+        }
+
             return res.status(200).json({ user, role: "user" });
         }
 
+       
         // Check house owner
         let owner = await HouseOwerModel.findOne({ email }).lean(); // convert to plain JS object
         if (owner) {
             delete owner.password; // remove sensitive field
+
+             if (
+                owner.verified &&
+                owner.verificationexpirydate &&
+                new Date() > owner.verificationexpirydate
+            ) {
+                owner.verified = false;
+                owner.verificationbalance = 0;
+                owner.dateofverification = null;
+                owner.verificationexpirydate = null;
+
+                await owner.save();
+            }
+
             return res.status(200).json({ user: owner, role: "owner" });
 
 
-             if (
-            owner.verified &&
-            owner.verificationexpirydate &&
-            new Date() > owner.verificationexpirydate
-        ) {
-            owner.verified = false;
-            owner.verificationbalance = 0;
-            owner.dateofverification = null;
-            owner.verificationexpirydate = null;
-
-            await owner.save();
-        }
-
+           
         }
 
         return res.status(404).json({ message: "No user found with this email" });

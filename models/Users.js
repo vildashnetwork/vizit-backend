@@ -162,7 +162,21 @@ const userSchema = new mongoose.Schema(
     paymentprscribtion: {
       type: [paymentSchema],
       default: []
+    },
+    paytoviewdetailstartdate: {
+      type: Date,
+      default: date.now
+    },
+    paytoviewenddate: {
+      type: Date,
+      default: null
+    },
+    haspay: {
+      type: Boolean,
+      default: false
     }
+
+
   },
   { timestamps: true }
 );
