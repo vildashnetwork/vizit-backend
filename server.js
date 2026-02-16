@@ -20,6 +20,7 @@ import allcalls from "./routes/calling.js";
 import apointment from "./routes/apoitment.js";
 import video from "./routes/video.js";
 import payment from "./routes/payment.js"
+import resetpass from "./routes/resetpass.js";
 env.config();
 
 
@@ -52,10 +53,10 @@ env.config();
 
 // --- 2. SECURITY & OTHER MIDDLEWARE ---
 app.use(
-    helmet({
-        // This setting is essential to allow cross-origin requests
-        crossOriginResourcePolicy: { policy: "cross-origin" },
-    })
+  helmet({
+    // This setting is essential to allow cross-origin requests
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
 );
 app.use(morgan(":method :url :status :response-time ms - :res[content-length]"));
 app.use(express.json());
@@ -72,28 +73,29 @@ app.use("/api/call", allcalls);
 app.use("/api/apointment", apointment);
 app.use("/api/video", video);
 app.use("/api", payment);
+app.use("/api/resetpass", resetpass);
 
 app.get("/", (_req, res) => {
-    res.send("server is on");
+  res.send("server is on");
 });
 
 // --- 4. DATABASE CONNECTION ---
 const connectDb = async () => {
-    try {
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log("database connected successfully!!");
-    } catch (err) {
-        console.error("error connecting to the database:", err);
-    }
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log("database connected successfully!!");
+  } catch (err) {
+    console.error("error connecting to the database:", err);
+  }
 };
 
 // --- 5. START SERVER ---
 const PORT = process.env.PORT || 6300;
 
 connectDb().then(() => {
-    httpServer.listen(PORT, () => {
-        console.log(`server running on port ${PORT}`);
-    });
+  httpServer.listen(PORT, () => {
+    console.log(`server running on port ${PORT}`);
+  });
 });
 
 // TEMPORARY: Add this to server.js after 'database connected successfully'

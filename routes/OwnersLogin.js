@@ -160,7 +160,7 @@ router.get("/decode/token/owner", async (req, res) => {
             return res.status(404).json({ message: "Owner not found" });
         }
 
-        
+
         if (
             owner.verified &&
             owner.verificationexpirydate &&

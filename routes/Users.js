@@ -86,6 +86,9 @@ router.post("/register", async (req, res) => {
             });
         }
 
+        if (await HouseOwerModel.findOne({ email })) {
+            return res.status(409).json({ message: "Email already exists" });
+        }
         // Hash password
         const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
@@ -403,28 +406,28 @@ router.get("/me/:email", async (req, res) => {
         if (user) {
             delete user.password; // remove sensitive field
 
-             if (
-            user.haspay &&
-            user.paytoviewenddate &&
-            new Date() > user.paytoviewenddate
-        ) {
-            user.haspay = false;
-            user.paytoviewdetailstartdate = null;
-            user.paytoviewenddate = null;
+            if (
+                user.haspay &&
+                user.paytoviewenddate &&
+                new Date() > user.paytoviewenddate
+            ) {
+                user.haspay = false;
+                user.paytoviewdetailstartdate = null;
+                user.paytoviewenddate = null;
 
-            await user.save();
-        }
+                await user.save();
+            }
 
             return res.status(200).json({ user, role: "user" });
         }
 
-       
+
         // Check house owner
         let owner = await HouseOwerModel.findOne({ email }).lean(); // convert to plain JS object
         if (owner) {
             delete owner.password; // remove sensitive field
 
-             if (
+            if (
                 owner.verified &&
                 owner.verificationexpirydate &&
                 new Date() > owner.verificationexpirydate
@@ -440,7 +443,7 @@ router.get("/me/:email", async (req, res) => {
             return res.status(200).json({ user: owner, role: "owner" });
 
 
-           
+
         }
 
         return res.status(404).json({ message: "No user found with this email" });
