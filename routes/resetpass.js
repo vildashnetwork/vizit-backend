@@ -14,7 +14,7 @@ const sendBrevoEmail = async (email, otpCode) => {
     const url = "https://api.brevo.com/v3/smtp/email";
 
     const emailContent = {
-        sender: { name: "Vizit Info", email: process.env.SUPPORT_EMAIL },
+        sender: { name: "Vizit Support", email: process.env.SUPPORT_EMAIL },
         to: [{ email: email }],
         subject: "Your Vizit Password Reset Code",
         htmlContent: `
