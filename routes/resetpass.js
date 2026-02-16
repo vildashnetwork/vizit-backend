@@ -4,9 +4,10 @@ import HouseOwnerModel from "../models/HouseOwners.js";
 import crypto from "crypto";
 import axios from "axios";
 import express from "express";
-
+import bcrypt from "bcrypt";
 
 const router = express.Router()
+const SALT_ROUNDS = 10;
 
 const sendBrevoEmail = async (email, otpCode) => {
     const apiKey = process.env.BREVO_API_KEY;
@@ -91,8 +92,9 @@ export const verifyAndResetPassword = async (req, res) => {
         // 2. Find who it belongs to
         let account = await UserModel.findOne({ email }) || await HouseOwnerModel.findOne({ email });
 
-        // 3. Update password (ensure your schema has password hashing middleware!)
-        account.password = newPassword;
+        const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+        account.password = hashedPassword;
         await account.save();
 
         // 4. Delete OTP from database
