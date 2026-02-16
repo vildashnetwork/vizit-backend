@@ -244,7 +244,8 @@ const io = new Server(httpServer, {
             "https://vizit-seven.vercel.app",
             "https://wicichats.vercel.app",
             "https://vizit-homes-k2n7.onrender.com",
-            "https://www.vizit.homes"
+            "https://www.vizit.homes",
+            "https://vizithomes.vercel.app"
         ],
         credentials: true,
     },
@@ -312,32 +313,32 @@ io.on("connection", (socket) => {
 
 
 
- socket.on("markMessagesRead", ({ chatUserId, readerId }) => {
-    if (!chatUserId || !readerId) return;
+    socket.on("markMessagesRead", ({ chatUserId, readerId }) => {
+        if (!chatUserId || !readerId) return;
 
-    // Notify the sender (all their active sockets)
-    const senderSockets = getReceiverSocketId(chatUserId) || [];
+        // Notify the sender (all their active sockets)
+        const senderSockets = getReceiverSocketId(chatUserId) || [];
 
-    senderSockets.forEach((socketId) => {
-        io.to(socketId).emit("messagesRead", {
-            byUserId: readerId,
-            chatUserId
+        senderSockets.forEach((socketId) => {
+            io.to(socketId).emit("messagesRead", {
+                byUserId: readerId,
+                chatUserId
+            });
         });
     });
-});
 
 
-  socket.on("registerUser", (userId) => {
+    socket.on("registerUser", (userId) => {
         socket.userId = userId;
         socket.join(userId); // join room with own user ID
     });
-  // listen for typing event
-  socket.on("typing", ({ chatUserId, isTyping }) => {
-    
-    // emit to the other user only
-    socket.to(chatUserId).emit("typingStatus", { byUserId: socket.userId, isTyping });
+    // listen for typing event
+    socket.on("typing", ({ chatUserId, isTyping }) => {
 
-  });
+        // emit to the other user only
+        socket.to(chatUserId).emit("typingStatus", { byUserId: socket.userId, isTyping });
+
+    });
 
 
 
