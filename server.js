@@ -270,7 +270,7 @@ import session from "express-session";
 import passport from "passport";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
-
+import MongoStore from "connect-mongo";
 // Route Imports
 import ownerroute from "./routes/OwnersLogin.js";
 import userroute from "./routes/Users.js";
@@ -341,6 +341,10 @@ app.use(
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGODB_URI,
+      collectionName: "sessions",
+    }),
     cookie: {
       httpOnly: true,
       secure: isProd,
