@@ -95,12 +95,20 @@ const paymentSchema = new mongoose.Schema(
 const houseOwnerSchema = new mongoose.Schema(
   {
     googleId: { type: String, sparse: true },
-    accountstatus: {
-      type: String,
-      enum: ["active", "suspended", "deactivated", "review"],
-      default: "review"
 
+
+
+    companyEmail: { type: String, required: true },
+    idSnapshot: { type: String },
+    taxCardSnapshot: { type: String },
+    selfieWithId: { type: String },
+    status: {
+      type: String, enum: ["pending", "approved", "rejected"],
+      default: "pending"
     },
+
+
+
     name: {
       type: String,
       required: true,
