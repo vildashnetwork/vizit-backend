@@ -24,8 +24,8 @@ passport.use(
 
                 if (roleFromState === "owner") {
                     existingUser = await HouseOwnerModel.findOne({ email });
-
-                    if (!existingUser) {
+                    const meexistingUser = await UserModel.findOne({ email });
+                    if (!existingUser && !meexistingUser) {
                         existingUser = await HouseOwnerModel.create({
                             googleId: profile.id,
                             email,
@@ -36,8 +36,9 @@ passport.use(
                     }
                 } else {
                     existingUser = await UserModel.findOne({ email });
+                    const meexistingUser = await HouseOwnerModel.findOne({ email });
 
-                    if (!existingUser) {
+                    if (!existingUser && !meexistingUser) {
                         existingUser = await UserModel.create({
                             googleId: profile.id,
                             email,
