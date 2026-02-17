@@ -96,6 +96,14 @@ const paymentSchema = new mongoose.Schema(
 
 const userSchema = new mongoose.Schema(
   {
+    googleId: { type: String, sparse: true },
+    accountstatus: {
+      type: String,
+      enum: ["active", "suspended", "deactivated", "review"],
+      default: "review"
+
+    },
+
     name: {
       type: String,
       required: true,

@@ -6,7 +6,7 @@ import mongoose from "mongoose";
 
 const paymentSchema = new mongoose.Schema(
   {
- nkwaTransactionId: {
+    nkwaTransactionId: {
       type: String,
       unique: true, // Add this
       sparse: true, // Keep this
@@ -116,7 +116,7 @@ const houseOwnerSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: true
+      defualt: ""
     },
 
     companyName: {
@@ -126,26 +126,22 @@ const houseOwnerSchema = new mongoose.Schema(
 
     bio: {
       type: String,
-      required: true
+      default: ""
     },
 
     phone: {
       type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      index: true
+      default: ""
     },
 
     interest: {
       type: String,
-      required: true
+      default: ""
     },
 
     IDno: {
       type: String,
-      required: true,
-      trim: true
+      default: ""
     },
 
     profile: {
