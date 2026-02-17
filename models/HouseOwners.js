@@ -113,6 +113,7 @@ const houseOwnerSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true
+
     },
 
     email: {
