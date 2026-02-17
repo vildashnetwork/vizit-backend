@@ -100,7 +100,7 @@ const userSchema = new mongoose.Schema(
     accountstatus: {
       type: String,
       enum: ["active", "suspended", "deactivated", "review"],
-      default: "review"
+      default: "active"
 
     },
 
