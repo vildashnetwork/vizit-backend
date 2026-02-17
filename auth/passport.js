@@ -9,39 +9,53 @@ passport.use(
             clientID: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
             callbackURL: process.env.GOOGLE_CALLBACK_URL,
-            passReqToCallback: true // Allows us to access the request (to get role if needed)
+            passReqToCallback: true,
         },
         async (req, accessToken, refreshToken, profile, done) => {
             try {
                 const email = profile.emails?.[0]?.value;
+                const roleFromState = req.query.state; // 👈 GET ROLE HERE
 
-                // 1. Search across BOTH collections
-                let user = await UserModel.findOne({ email });
-                let owner = await HouseOwnerModel.findOne({ email });
+                if (!["owner", "seeker"].includes(roleFromState)) {
+                    return done(new Error("Invalid role received"), null);
+                }
 
-                let finalUser = user || owner;
+                let existingUser;
 
-                // 2. If user doesn't exist at all, REGISTER automatically
-                if (!finalUser) {
-                    // Default to 'user' role unless frontend specified otherwise in session
-                    finalUser = await UserModel.create({
-                        googleId: profile.id,
-                        email: email,
-                        name: profile.displayName,
-                        profile: profile.photos?.[0]?.value,
-                        role: "user"
-                    });
+                if (roleFromState === "owner") {
+                    existingUser = await HouseOwnerModel.findOne({ email });
+
+                    if (!existingUser) {
+                        existingUser = await HouseOwnerModel.create({
+                            googleId: profile.id,
+                            email,
+                            name: profile.displayName,
+                            profile: profile.photos?.[0]?.value,
+                            role: "owner",
+                        });
+                    }
                 } else {
-                    // 3. Link Google ID if it's an existing account without one
-                    if (!finalUser.googleId) {
-                        finalUser.googleId = profile.id;
-                        await finalUser.save();
+                    existingUser = await UserModel.findOne({ email });
+
+                    if (!existingUser) {
+                        existingUser = await UserModel.create({
+                            googleId: profile.id,
+                            email,
+                            name: profile.displayName,
+                            profile: profile.photos?.[0]?.value,
+                            role: "seeker",
+                        });
                     }
                 }
 
-                // Append the role to the object so the callback can see it
-                const userObj = finalUser.toObject();
-                userObj.role = user ? "user" : "owner";
+                // If account exists but no googleId
+                if (!existingUser.googleId) {
+                    existingUser.googleId = profile.id;
+                    await existingUser.save();
+                }
+
+                const userObj = existingUser.toObject();
+                userObj.role = roleFromState;
 
                 return done(null, userObj);
             } catch (err) {
@@ -51,10 +65,17 @@ passport.use(
     )
 );
 
-passport.serializeUser((user, done) => done(null, { id: user._id, role: user.role }));
+// Serialize
+passport.serializeUser((user, done) => {
+    done(null, { id: user._id, role: user.role });
+});
+
+// Deserialize
 passport.deserializeUser(async (data, done) => {
     try {
-        const Model = data.role === "owner" ? HouseOwnerModel : UserModel;
+        const Model =
+            data.role === "owner" ? HouseOwnerModel : UserModel;
+
         const user = await Model.findById(data.id);
         done(null, user);
     } catch (err) {

@@ -373,27 +373,41 @@ app.get("/", (_req, res) => {
 // -------------------- AUTH (Google OAuth) --------------------
 
 // Start OAuth flow
-app.get(
-  "/auth/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
-);
+// Start OAuth flow with role param
+app.get("/auth/google", (req, res, next) => {
+  const role = req.query.role;
+
+  if (!role || !["owner", "seeker"].includes(role)) {
+    return res.status(400).json({ message: "Invalid role parameter" });
+  }
+
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    state: role, // pass role via OAuth state
+  })(req, res, next);
+});
+
 
 // OAuth callback
 app.get(
   "/auth/google/callback",
-  passport.authenticate("google", { failureRedirect: `${FRONTEND}/login-failed` }),
+  passport.authenticate("google", {
+    failureRedirect: `${FRONTEND}/login-failed`,
+  }),
   (req, res) => {
     try {
       if (!req.user) return res.redirect(`${FRONTEND}/login-failed`);
 
-      // Sign JWT including the Role
       const token = jwt.sign(
-        { id: req.user._id, email: req.user.email, role: req.user.role },
+        {
+          id: req.user._id,
+          email: req.user.email,
+          role: req.user.role,
+        },
         JWT_SECRET,
         { expiresIn: "7d" }
       );
 
-      // Set Cookie (for Web)
       res.cookie(COOKIE_NAME, token, {
         httpOnly: true,
         secure: isProd,
@@ -401,8 +415,10 @@ app.get(
         maxAge: COOKIE_MAX_AGE,
       });
 
-      // Redirect to frontend with token and role params
-      const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(token)}&role=${req.user.role}`;
+      const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(
+        token
+      )}&role=${req.user.role}`;
+
       return res.redirect(targetUrl);
     } catch (err) {
       console.error("Callback Error:", err);
@@ -410,6 +426,7 @@ app.get(
     }
   }
 );
+
 
 // Logout
 app.get("/auth/logout", (req, res, next) => {
