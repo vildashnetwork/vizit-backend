@@ -112,7 +112,7 @@ const userSchema = new mongoose.Schema(
 
     number: {
       type: String,
-      required: true,
+      defualt: "",
       unique: true,
       trim: true
     },
@@ -132,12 +132,12 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: true
+      defualt: ""
     },
 
     interest: {
       type: String,
-      required: true
+      defualt: ""
     },
 
     Notifications: {
