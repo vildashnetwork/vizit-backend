@@ -3,35 +3,68 @@ import HouseOwnerModel from "../models/HouseOwners.js";
 
 const router = express.Router();
 
-// ================= Submit KYC =================
+/* ===========================
+   SUBMIT OR UPDATE KYC
+=========================== */
 router.post("/submit", async (req, res) => {
     try {
-        const { userId, companyName, companyEmail, phone, address, idSnapshot, taxCardSnapshot, selfieWithId } = req.body;
-
-        // Check if KYC already exists
-        let kyc = await KYCModel.findOne({ userId });
-        if (kyc) return res.status(400).json({ message: "KYC already submitted" });
-
-        kyc = await KYCModel.create({
-            userId,
+        const {
             companyName,
             companyEmail,
             phone,
-            address,
+            location,
             idSnapshot,
             taxCardSnapshot,
             selfieWithId,
-            status: "pending",
-        });
+            email,
+        } = req.body;
+
+        if (!email) return res.status(400).json({ message: "Email is required" });
+
+        // Check if KYC already exists
+        let kyc = await HouseOwnerModel.findOne({ email });
+
+        if (!kyc) {
+            // If no existing KYC, create a new one
+            kyc = await HouseOwnerModel.create({
+                email,
+                companyName,
+                companyEmail,
+                phone,
+                location,
+                idSnapshot,
+                taxCardSnapshot,
+                selfieWithId,
+                status: "pending",
+            });
+        } else {
+            // If exists, update existing KYC
+            kyc = await HouseOwnerModel.findByIdAndUpdate(
+                kyc._id,
+                {
+                    companyName,
+                    companyEmail,
+                    phone,
+                    location,
+                    idSnapshot,
+                    taxCardSnapshot,
+                    selfieWithId,
+                    status: "pending",
+                },
+                { new: true }
+            );
+        }
 
         res.json({ message: "KYC submitted successfully", kyc });
     } catch (err) {
-        console.error(err);
+        console.error("Submit KYC Error:", err);
         res.status(500).json({ message: "Server error" });
     }
 });
 
-// ================= Update Account Status =================
+/* ===========================
+   UPDATE ACCOUNT STATUS
+=========================== */
 router.put("/status/:id", async (req, res) => {
     try {
         const { id } = req.params;
@@ -41,7 +74,7 @@ router.put("/status/:id", async (req, res) => {
             return res.status(400).json({ message: "Invalid status" });
         }
 
-        const kyc = await KYCModel.findByIdAndUpdate(
+        const kyc = await HouseOwnerModel.findByIdAndUpdate(
             id,
             { status },
             { new: true }
@@ -49,22 +82,26 @@ router.put("/status/:id", async (req, res) => {
 
         if (!kyc) return res.status(404).json({ message: "KYC not found" });
 
-        res.json({ message: "KYC status updated", kyc });
+        res.json({ message: "KYC status updated successfully", kyc });
     } catch (err) {
-        console.error(err);
+        console.error("Update Status Error:", err);
         res.status(500).json({ message: "Server error" });
     }
 });
 
-// ================= Get KYC by User =================
-router.get("/user/:userId", async (req, res) => {
+/* ===========================
+   GET KYC BY EMAIL
+=========================== */
+router.get("/user/:email", async (req, res) => {
     try {
-        const { userId } = req.params;
-        const kyc = await KYCModel.findOne({ userId });
+        const { email } = req.params;
+        const kyc = await HouseOwnerModel.findOne({ email });
+
         if (!kyc) return res.status(404).json({ message: "KYC not found" });
+
         res.json({ kyc });
     } catch (err) {
-        console.error(err);
+        console.error("Get KYC Error:", err);
         res.status(500).json({ message: "Server error" });
     }
 });

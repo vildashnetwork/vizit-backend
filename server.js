@@ -283,6 +283,7 @@ import apointment from "./routes/apoitment.js"; // kept your original filename
 import video from "./routes/video.js";
 import payment from "./routes/payment.js";
 import resetpass from "./routes/resetpass.js";
+import kyc from "./routes/kyc.js"
 
 import "./auth/passport.js";
 
@@ -365,6 +366,7 @@ app.use("/api/apointment", apointment);
 app.use("/api/video", video);
 app.use("/api", payment);
 app.use("/api/resetpass", resetpass);
+app.use("/api/kyc", kyc); // added KYC route
 
 app.get("/", (_req, res) => {
   res.send("server is on");
