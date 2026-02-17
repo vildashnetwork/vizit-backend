@@ -297,27 +297,27 @@ const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me";
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-jwt";
 const FRONTEND = process.env.FRONTEND_URL || "https://www.vizit.homes";
-const ALLOWED_ORIGINS = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "https://vizit-seven.vercel.app",
-  FRONTEND,
-];
+// const ALLOWED_ORIGINS = [
+//   "http://localhost:5173",
+//   "http://localhost:5174",
+//   "https://vizit-seven.vercel.app",
+//   FRONTEND,
+// ];
 
 // -------------------- MIDDLEWARE --------------------
 
 // CORS
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow requests with no origin (like mobile apps, curl, postman)
-      if (!origin) return callback(null, true);
-      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-      return callback(new Error("CORS policy: origin not allowed"), false);
-    },
-    credentials: true,
-  })
-);
+// app.use(
+//   cors({
+//     origin: (origin, callback) => {
+//       // allow requests with no origin (like mobile apps, curl, postman)
+//       if (!origin) return callback(null, true);
+//       if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+//       return callback(new Error("CORS policy: origin not allowed"), false);
+//     },
+//     credentials: true,
+//   })
+// );
 
 // Security + logging + parsers
 app.use(
