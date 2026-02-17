@@ -249,7 +249,7 @@ const io = new Server(httpServer, {
             "http://169.254.237.117:8080",
             "http://localhost:8080",
             "http://192.168.43.221:8080",
-            "https://dashboard.vizit.homes"
+            "https://dashboard.vizit.homes",
 
         ],
         credentials: true,
@@ -425,4 +425,4 @@ io.on("connection", (socket) => {
     });
 });
 
-expo
+export { app, io, httpServer };
