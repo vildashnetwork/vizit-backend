@@ -98,7 +98,7 @@ const houseOwnerSchema = new mongoose.Schema(
 
 
 
-    companyEmail: { type: String, defualt: "" },
+    companyEmail: { type: String},
     idSnapshot: { type: String },
     taxCardSnapshot: { type: String },
     selfieWithId: { type: String },
@@ -126,43 +126,35 @@ const houseOwnerSchema = new mongoose.Schema(
     },
 
     location: {
-      type: String,
-      default: ""
+      type: String
     },
 
     password: {
       type: String,
-      defualt: ""
     },
 
     companyName: {
-      type: String,
-      defualt: ""
+      type: String
     },
 
     bio: {
-      type: String,
-      default: ""
+      type: String
     },
 
     phone: {
-      type: String,
-      default: ""
+      type: String
     },
 
     interest: {
-      type: String,
-      default: ""
+      type: String
     },
 
     IDno: {
-      type: String,
-      default: ""
+      type: String
     },
 
     profile: {
-      type: String,
-      default: ""
+      type: String
     },
 
     twoFactorMethod: {

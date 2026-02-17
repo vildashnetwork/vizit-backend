@@ -126,18 +126,15 @@ const userSchema = new mongoose.Schema(
     },
 
     profile: {
-      type: String,
-      default: ""
+      type: String
     },
 
     password: {
-      type: String,
-      defualt: ""
+      type: String
     },
 
     interest: {
-      type: String,
-      defualt: ""
+      type: String
     },
 
     Notifications: {
