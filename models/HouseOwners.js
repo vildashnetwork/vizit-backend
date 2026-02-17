@@ -98,7 +98,7 @@ const houseOwnerSchema = new mongoose.Schema(
 
 
 
-    companyEmail: { type: String, required: true },
+    companyEmail: { type: String, defualt: "" },
     idSnapshot: { type: String },
     taxCardSnapshot: { type: String },
     selfieWithId: { type: String },
