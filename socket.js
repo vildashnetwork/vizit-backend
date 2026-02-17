@@ -246,6 +246,10 @@ const io = new Server(httpServer, {
             "https://wicichats.vercel.app",
             "https://vizit-homes-k2n7.onrender.com",
             "https://www.vizit.homes",
+            "http://169.254.237.117:8080",
+            "http://localhost:8080",
+            "http://192.168.43.221:8080",
+            "https://dashboard.vizit.homes"
 
         ],
         credentials: true,
@@ -421,4 +425,4 @@ io.on("connection", (socket) => {
     });
 });
 
-export { app, io, httpServer };
+expo

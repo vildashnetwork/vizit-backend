@@ -89,6 +89,17 @@ router.put("/status/:id", async (req, res) => {
     }
 });
 
+router.get("/", async (req, res) => {
+    try {
+        const kycs = await HouseOwnerModel.find();
+        if (kycs.length === 0) return res.status(404).json({ message: "No KYC records found" })
+        res.status(200).json({ kycs })
+    } catch (error) {
+        res.status(500).json({ message: "Server error" })
+        console.log("Get All KYC Error:", error)
+    }
+})
+
 /* ===========================
    GET KYC BY EMAIL
 =========================== */
