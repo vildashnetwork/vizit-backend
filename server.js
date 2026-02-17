@@ -296,7 +296,7 @@ const COOKIE_NAME = "token";
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me";
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-jwt";
-const FRONTEND = process.env.FRONTEND_URL || "https://www.vizit.homes";
+const FRONTEND = "https://www.vizit.homes";
 // const ALLOWED_ORIGINS = [
 //   "http://localhost:5173",
 //   "http://localhost:5174",
