@@ -132,59 +132,112 @@ app.get("/", (_req, res) => {
 
 // Start OAuth flow
 // Start OAuth flow with role param
+// app.get("/auth/google", (req, res, next) => {
+//   const role = req.query.role;
+
+//   if (!role || !["owner", "seeker"].includes(role)) {
+//     return res.status(400).json({ message: "Invalid role parameter" });
+//   }
+
+//   passport.authenticate("google", {
+//     scope: ["profile", "email"],
+//     state: role,
+//   })(req, res, next);
+// });
+
+
+// // OAuth callback
+// app.get(
+//   "/auth/google/callback",
+//   passport.authenticate("google", {
+//     failureRedirect: `${FRONTEND}/login-failed`,
+//   }),
+//   (req, res) => {
+//     try {
+//       if (!req.user) return res.redirect(`${FRONTEND}/login-failed`);
+
+//       const token = jwt.sign(
+//         {
+//           id: req.user._id,
+//           email: req.user.email,
+//           role: req.user.role,
+//         },
+//         JWT_SECRET,
+//         { expiresIn: "7d" }
+//       );
+
+//       res.cookie(COOKIE_NAME, token, {
+//         httpOnly: true,
+//         secure: isProd,
+//         sameSite: isProd ? "lax" : "none",
+//         maxAge: COOKIE_MAX_AGE,
+//       });
+
+//       const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(
+//         token
+//       )}&role=${req.user.role}`;
+
+//       return res.redirect(targetUrl);
+//     } catch (err) {
+//       console.error("Callback Error:", err);
+//       return res.redirect(`${FRONTEND}/login-failed`);
+//     }
+//   }
+// );
+
+// Start OAuth flow
 app.get("/auth/google", (req, res, next) => {
   const role = req.query.role;
-
   if (!role || !["owner", "seeker"].includes(role)) {
     return res.status(400).json({ message: "Invalid role parameter" });
   }
 
   passport.authenticate("google", {
     scope: ["profile", "email"],
-    state: role,
+    state: role, // pass role in state
   })(req, res, next);
 });
 
-
-// OAuth callback
+// Callback
 app.get(
   "/auth/google/callback",
-  passport.authenticate("google", {
-    failureRedirect: `${FRONTEND}/login-failed`,
-  }),
-  (req, res) => {
-    try {
-      if (!req.user) return res.redirect(`${FRONTEND}/login-failed`);
+  (req, res, next) => {
+    passport.authenticate("google", async (err, user) => {
+      try {
+        if (err) {
+          console.error("Google callback error:", err);
+          return res.redirect(`${FRONTEND}/login-failed`);
+        }
+        if (!user) {
+          console.error("No user returned from Google strategy");
+          return res.redirect(`${FRONTEND}/login-failed`);
+        }
 
-      const token = jwt.sign(
-        {
-          id: req.user._id,
-          email: req.user.email,
-          role: req.user.role,
-        },
-        JWT_SECRET,
-        { expiresIn: "7d" }
-      );
+        // Create JWT
+        const token = jwt.sign(
+          { id: user._id, email: user.email, role: user.role },
+          JWT_SECRET,
+          { expiresIn: "7d" }
+        );
 
-      res.cookie(COOKIE_NAME, token, {
-        httpOnly: true,
-        secure: isProd,
-        sameSite: isProd ? "lax" : "none",
-        maxAge: COOKIE_MAX_AGE,
-      });
+        res.cookie(COOKIE_NAME, token, {
+          httpOnly: true,
+          secure: isProd,
+          sameSite: isProd ? "lax" : "none",
+          maxAge: COOKIE_MAX_AGE,
+        });
 
-      const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(
-        token
-      )}&role=${req.user.role}`;
+        // Redirect with token
+        const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(token)}&role=${user.role}`;
+        return res.redirect(targetUrl);
 
-      return res.redirect(targetUrl);
-    } catch (err) {
-      console.error("Callback Error:", err);
-      return res.redirect(`${FRONTEND}/login-failed`);
-    }
+      } catch (err) {
+        console.error("Callback processing error:", err);
+        return res.redirect(`${FRONTEND}/login-failed`);
+      }
+    })(req, res, next);
   }
 );
-
 
 // Logout
 app.get("/auth/logout", (req, res, next) => {
