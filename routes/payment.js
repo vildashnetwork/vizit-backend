@@ -3,6 +3,7 @@ import axios from "axios";
 import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
 import HouseOwnerModel from "../models/HouseOwners.js";
+import { Pay } from "@nkwa-pay/sdk";
 
 dotenv.config();
 const router = express.Router();
@@ -524,6 +525,189 @@ router.post("/subscribe-to-view", async (req, res) => {
     } catch (error) {
         console.error("Subscription Error:", error);
         res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+const NKWA_BASE_URL = process.env.NKWA_BASE_URL;
+const NKWA_API_KEY = process.env.API_KEY;
+
+router.post("/payments", async (req, res) => {
+    const { phone, amount } = req.body;
+
+    // Validation
+    if (!phone || !amount) {
+        return res.status(400).json({
+            success: false,
+            error: "Phone (phoneNumber) and amount are required"
+        });
+    }
+
+    try {
+        const response = await axios.post(
+            `${NKWA_BASE_URL}/disburse`,
+            {
+                // Note: Ensure phone includes country code (e.g., 237...)
+                phoneNumber: String(phone),
+                amount: parseInt(amount),
+            },
+            {
+                headers: {
+                    // Corrected: Use X-API-Key as per the OpenAPI spec
+                    "X-API-Key": NKWA_API_KEY,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+
+        // Success: The API returns a 201 status for created disbursements
+        res.status(201).json({
+            success: true,
+            data: response.data
+        });
+
+    } catch (err) {
+        // Detailed error logging
+        const statusCode = err.response?.status || 500;
+        const errorData = err.response?.data || { message: err.message };
+
+        console.error("Nkwa disbursement failed:", errorData);
+
+        res.status(statusCode).json({
+            success: false,
+            error: errorData,
+        });
+    }
+});
+
+
+// Initialize the SDK client
+const pay = new Pay({
+    apiKeyAuth: process.env.API_KEY,
+});
+
+router.get("/reconcile-all", async (req, res) => {
+    try {
+        const results = { checked: 0, updated: 0, credited: 0, errors: 0 };
+        const models = [UserModel, HouseOwnerModel];
+
+        for (const model of models) {
+            // Find users who have at least one pending transaction
+            const users = await model.find({ "paymentprscribtion.status": "pending" });
+
+            for (const user of users) {
+                // We use a for...of loop to handle async/await properly
+                for (const transaction of user.paymentprscribtion || []) {
+                    if (transaction.status !== "pending") continue;
+                    if (!transaction.nkwaTransactionId) continue;
+
+                    results.checked++;
+
+                    try {
+                        // Use the SDK's Get method which corresponds to GET /payments/:id
+                        const nkwaPayment = await pay.payments.get({
+                            id: transaction.nkwaTransactionId,
+                        });
+
+                        // Logic: If Nkwa says it's successful but our DB says pending
+                        if (nkwaPayment.status !== transaction.status) {
+                            const updateQuery = {
+                                $set: {
+                                    "paymentprscribtion.$.status": nkwaPayment.status,
+                                    "paymentprscribtion.$.updatedAt": new Date()
+                                }
+                            };
+
+                            // Financial safety check: Only credit if success and not already added
+                            if (nkwaPayment.status === "success" && transaction.added !== "added") {
+                                updateQuery.$inc = { totalBalance: nkwaPayment.amount };
+                                updateQuery.$set["paymentprscribtion.$.added"] = "added";
+                                results.credited++;
+                            }
+
+                            await model.updateOne(
+                                { _id: user._id, "paymentprscribtion._id": transaction._id },
+                                updateQuery
+                            );
+                            results.updated++;
+                        }
+                    } catch (err) {
+                        // Log specific ID failure so you can investigate
+                        console.error(`Reconcile failed for ID ${transaction.nkwaTransactionId}:`, err.message);
+                        results.errors++;
+                    }
+                }
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Reconciliation process finished",
+            results
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+router.get("/all-transactions", async (req, res) => {
+    try {
+        const fetchFromModel = async (Model, roleLabel) => {
+            return await Model.aggregate([
+                // 1. Only look at documents that actually have transactions
+                { $match: { "paymentprscribtion.0": { $exists: true } } },
+
+                // 2. Flatten the array so each transaction is its own document
+                { $unwind: "$paymentprscribtion" },
+
+                // 3. Shape the output
+                {
+                    $project: {
+                        _id: 0,
+                        transactionId: "$paymentprscribtion._id",
+                        nkwaId: "$paymentprscribtion.nkwaTransactionId",
+                        amount: "$paymentprscribtion.amount",
+                        status: "$paymentprscribtion.status",
+                        date: "$paymentprscribtion.createdAt",
+                        ownerName: "$fullName", // Assumes your field is 'fullName'
+                        ownerRole: roleLabel,
+                        ownerId: "$_id"
+                    }
+                }
+            ]);
+        };
+
+        // Run both queries in parallel
+        const [userTransactions, ownerTransactions] = await Promise.all([
+            fetchFromModel(UserModel, "User"),
+            fetchFromModel(HouseOwnerModel, "HouseOwner")
+        ]);
+
+        // Combine and sort by date (newest first)
+        const allTransactions = [...userTransactions, ...ownerTransactions].sort(
+            (a, b) => new Date(b.date) - new Date(a.date)
+        );
+
+        res.status(200).json({
+            success: true,
+            count: allTransactions.length,
+            transactions: allTransactions
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 

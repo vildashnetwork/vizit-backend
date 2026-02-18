@@ -10,6 +10,7 @@
     "start": "nodemon server"
   },
   "dependencies": {
+    "@nkwa-pay/sdk": "^0.2.2",
     "axios": "^1.13.5",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.8.0",
