@@ -181,14 +181,14 @@
 
 
 
-
-
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import UserModel from "../models/Users.js";
 import HouseOwnerModel from "../models/HouseOwners.js";
 
-/* GOOGLE STRATEGY */
+/* ==============================
+   GOOGLE STRATEGY
+============================== */
 passport.use(
     new GoogleStrategy(
         {
@@ -200,14 +200,24 @@ passport.use(
         async (req, accessToken, refreshToken, profile, done) => {
             try {
                 const email = profile.emails?.[0]?.value;
-                const role = req.query.state;
+                const role = req.query.state; // expected "owner" or "seeker"
 
-                if (!email) return done(new Error("Google account has no email"), null);
-                if (!["owner", "seeker"].includes(role))
+                console.log("Google callback profile:", profile);
+                console.log("Google callback role (state):", role);
+
+                if (!email) {
+                    return done(new Error("Google account has no email"), null);
+                }
+
+                if (!["owner", "seeker"].includes(role)) {
                     return done(new Error("Invalid role selected"), null);
+                }
 
                 let existingUser;
 
+                // -----------------------------
+                // OWNER LOGIN
+                // -----------------------------
                 if (role === "owner") {
                     existingUser = await HouseOwnerModel.findOne({ email });
                     if (!existingUser) {
@@ -219,7 +229,12 @@ passport.use(
                             role: "owner",
                         });
                     }
-                } else {
+                }
+
+                // -----------------------------
+                // SEEKER LOGIN
+                // -----------------------------
+                if (role === "seeker") {
                     existingUser = await UserModel.findOne({ email });
                     if (!existingUser) {
                         existingUser = await UserModel.create({
@@ -232,12 +247,15 @@ passport.use(
                     }
                 }
 
+                // -----------------------------
                 // Ensure googleId is saved
+                // -----------------------------
                 if (!existingUser.googleId) {
                     existingUser.googleId = profile.id;
                     await existingUser.save();
                 }
 
+                // return sanitized user info
                 return done(null, {
                     id: existingUser._id.toString(),
                     role: existingUser.role,
@@ -251,12 +269,16 @@ passport.use(
     )
 );
 
-/* SERIALIZE */
+/* ==============================
+   SERIALIZE USER
+============================== */
 passport.serializeUser((user, done) => {
     done(null, { id: user.id, role: user.role });
 });
 
-/* DESERIALIZE */
+/* ==============================
+   DESERIALIZE USER
+============================== */
 passport.deserializeUser(async (data, done) => {
     try {
         if (!data?.id || !data?.role) return done(new Error("Invalid session"), null);
@@ -264,7 +286,9 @@ passport.deserializeUser(async (data, done) => {
         const Model = data.role === "owner" ? HouseOwnerModel : UserModel;
         const user = await Model.findById(data.id);
 
-        // if (!user) return done(new Error("User not found"), null);
+        if (!user) {
+            return done(new Error("User not found"), null);
+        }
 
         done(null, user);
     } catch (err) {
