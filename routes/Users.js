@@ -167,37 +167,110 @@ router.post("/login", async (req, res) => {
     }
 });
 
+// router.get("/decode/token/user", async (req, res) => {
+//     try {
+//         // call decode helper with the full request so it can check body, headers or cookies
+//         const result = decodeTokenFromReq(req);
+//         if (!result || !result.ok) {
+//             return res.status(result && result.status ? result.status : 401).json({ message: result && result.message ? result.message : "Failed to decode token" });
+//         }
+//         // return res.status(200).json({ data: result.payload });
+//         //find user by id from payload
+//         const user = await UserModel.findById(result.payload.id);
+
+//         if (!user) {
+//             return res.status(404).json({ message: "User not found" });
+//         }
+
+
+//         if (
+//             user.haspay &&
+//             user.paytoviewenddate &&
+//             new Date() > user.paytoviewenddate
+//         ) {
+//             user.haspay = false;
+//             user.paytoviewdetailstartdate = null;
+//             user.paytoviewenddate = null;
+
+//             await user.save();
+//         }
+//         return res.status(200).json({ user: sanitizeUser(user) });
+
+//     }
+//     catch (error) {
+//         console.error("Token decode error:", error);
+//         res.status(500).json({ message: "Internal server error" });
+//     }
+// });
+
+
+
+//get all users"
+
+
+
+
+
 router.get("/decode/token/user", async (req, res) => {
     try {
-        // call decode helper with the full request so it can check body, headers or cookies
         const result = decodeTokenFromReq(req);
+
         if (!result || !result.ok) {
-            return res.status(result && result.status ? result.status : 401).json({ message: result && result.message ? result.message : "Failed to decode token" });
-        }
-        // return res.status(200).json({ data: result.payload });
-        //find user by id from payload
-        const user = await UserModel.findById(result.payload.id);
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+            return res
+                .status(result?.status || 401)
+                .json({ message: result?.message || "Failed to decode token" });
         }
 
+        const { id } = result.payload;
 
-        if (
-            user.haspay &&
-            user.paytoviewenddate &&
-            new Date() > user.paytoviewenddate
-        ) {
-            user.haspay = false;
-            user.paytoviewdetailstartdate = null;
-            user.paytoviewenddate = null;
+        // Check normal user
+        let user = await UserModel.findById(id);
 
-            await user.save();
+        if (user) {
+            if (
+                user.haspay &&
+                user.paytoviewenddate &&
+                new Date() > user.paytoviewenddate
+            ) {
+                user.haspay = false;
+                user.paytoviewdetailstartdate = null;
+                user.paytoviewenddate = null;
+                await user.save();
+            }
+
+            return res.status(200).json({
+                user: sanitizeUser(user),
+                role: "user"
+            });
         }
-        return res.status(200).json({ user: sanitizeUser(user) });
 
-    }
-    catch (error) {
+        // Check house owner
+        let owner = await HouseOwerModel.findById(id);
+
+        if (owner) {
+            if (
+                owner.verified &&
+                owner.verificationexpirydate &&
+                new Date() > owner.verificationexpirydate
+            ) {
+                owner.verified = false;
+                owner.verificationbalance = 0;
+                owner.dateofverification = null;
+                owner.verificationexpirydate = null;
+                await owner.save();
+            }
+
+            const { password, __v, ...safeOwner } = owner.toObject();
+
+            return res.status(200).json({
+                user: safeOwner,
+                role: "owner"
+            });
+        }
+
+        return res.status(404).json({ message: "User not found" });
+
+    } catch (error) {
         console.error("Token decode error:", error);
         res.status(500).json({ message: "Internal server error" });
     }
@@ -205,7 +278,7 @@ router.get("/decode/token/user", async (req, res) => {
 
 
 
-//get all users"
+
 
 router.get("/all", async (req, res) => {
     try {
