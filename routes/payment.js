@@ -711,4 +711,46 @@ router.get("/all-transactions", async (req, res) => {
     }
 });
 
+
+
+router.get("/allusers", async (req, res) => {
+    try {
+        // Fetch both collections simultaneously
+        const [users, owners] = await Promise.all([
+            UserModel.find({}).select("-password"), // Exclude passwords for security
+            HouseOwnerModel.find({}).select("-password")
+        ]);
+
+        // Tag each user with their role/category so the frontend can distinguish them
+        const formattedUsers = users.map(u => ({
+            ...u._doc,
+            category: "Seeker",
+            role: "user"
+        }));
+
+        const formattedOwners = owners.map(o => ({
+            ...o._doc,
+            category: "HouseOwner",
+            role: "owner"
+        }));
+
+        // Combine into one master list
+        const allPlatformUsers = [...formattedUsers, ...formattedOwners];
+
+        res.status(200).json({
+            success: true,
+            total: allPlatformUsers.length,
+            ownersCount: owners.length,
+            seekersCount: users.length,
+            users: allPlatformUsers
+        });
+
+    } catch (error) {
+        console.error("Fetch All Users Error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to retrieve platform users"
+        });
+    }
+});
 export default router;
