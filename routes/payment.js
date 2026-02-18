@@ -681,7 +681,7 @@ router.get("/all-transactions", async (req, res) => {
                         amount: "$paymentprscribtion.amount",
                         status: "$paymentprscribtion.status",
                         date: "$paymentprscribtion.createdAt",
-                        ownerName: "$fullName", // Assumes your field is 'fullName'
+                        ownerName: "$name",
                         ownerRole: roleLabel,
                         ownerId: "$_id"
                     }
