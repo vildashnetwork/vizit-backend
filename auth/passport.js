@@ -264,7 +264,7 @@ passport.deserializeUser(async (data, done) => {
         const Model = data.role === "owner" ? HouseOwnerModel : UserModel;
         const user = await Model.findById(data.id);
 
-        if (!user) return done(new Error("User not found"), null);
+        // if (!user) return done(new Error("User not found"), null);
 
         done(null, user);
     } catch (err) {
