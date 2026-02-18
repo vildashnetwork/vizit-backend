@@ -153,14 +153,42 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import UserModel from "../models/Users.js";
 import HouseOwnerModel from "../models/HouseOwners.js";
 
-/* =======================================================
-   GOOGLE STRATEGY
-======================================================= */
+/* GOOGLE STRATEGY */
 passport.use(
     new GoogleStrategy(
         {
@@ -171,54 +199,37 @@ passport.use(
         },
         async (req, accessToken, refreshToken, profile, done) => {
             try {
-                // Extract email
                 const email = profile.emails?.[0]?.value;
-                if (!email) {
-                    return done(new Error("Google account has no email"), null);
-                }
+                const role = req.query.state;
 
-                // Extract role from state param; fallback to 'seeker'
-                const roleFromState = req.query.state || "seeker";
-                if (!["owner", "seeker"].includes(roleFromState)) {
+                if (!email) return done(new Error("Google account has no email"), null);
+                if (!["owner", "seeker"].includes(role))
                     return done(new Error("Invalid role selected"), null);
-                }
 
-                // 🔎 Check existing accounts
-                const ownerAccount = await HouseOwnerModel.findOne({ email });
-                const seekerAccount = await UserModel.findOne({ email });
-
-                // 🚫 Prevent cross-role login
-                if (ownerAccount && roleFromState === "seeker") {
-                    return done(
-                        new Error("This email is already registered as Owner. Please login as Owner."),
-                        null
-                    );
-                }
-                if (seekerAccount && roleFromState === "owner") {
-                    return done(
-                        new Error("This email is already registered as Seeker. Please login as Seeker."),
-                        null
-                    );
-                }
-
-                // ✅ Determine or create user
                 let existingUser;
-                if (roleFromState === "owner") {
-                    existingUser = ownerAccount || await HouseOwnerModel.create({
-                        googleId: profile.id,
-                        email,
-                        name: profile.displayName,
-                        profile: profile.photos?.[0]?.value,
-                        role: "owner",
-                    });
+
+                if (role === "owner") {
+                    existingUser = await HouseOwnerModel.findOne({ email });
+                    if (!existingUser) {
+                        existingUser = await HouseOwnerModel.create({
+                            googleId: profile.id,
+                            email,
+                            name: profile.displayName,
+                            profile: profile.photos?.[0]?.value,
+                            role: "owner",
+                        });
+                    }
                 } else {
-                    existingUser = seekerAccount || await UserModel.create({
-                        googleId: profile.id,
-                        email,
-                        name: profile.displayName,
-                        profile: profile.photos?.[0]?.value,
-                        role: "seeker",
-                    });
+                    existingUser = await UserModel.findOne({ email });
+                    if (!existingUser) {
+                        existingUser = await UserModel.create({
+                            googleId: profile.id,
+                            email,
+                            name: profile.displayName,
+                            profile: profile.photos?.[0]?.value,
+                            role: "seeker",
+                        });
+                    }
                 }
 
                 // Ensure googleId is saved
@@ -227,36 +238,37 @@ passport.use(
                     await existingUser.save();
                 }
 
-                return done(null, existingUser);
+                return done(null, {
+                    id: existingUser._id.toString(),
+                    role: existingUser.role,
+                    email: existingUser.email,
+                });
             } catch (err) {
-                console.error("Passport GoogleStrategy Error:", err);
+                console.error("GoogleStrategy Error:", err);
                 return done(err, null);
             }
         }
     )
 );
 
-/* =======================================================
-   SERIALIZE USER
-======================================================= */
+/* SERIALIZE */
 passport.serializeUser((user, done) => {
-    done(null, { id: user._id, role: user.role });
+    done(null, { id: user.id, role: user.role });
 });
 
-/* =======================================================
-   DESERIALIZE USER
-======================================================= */
+/* DESERIALIZE */
 passport.deserializeUser(async (data, done) => {
     try {
+        if (!data?.id || !data?.role) return done(new Error("Invalid session"), null);
+
         const Model = data.role === "owner" ? HouseOwnerModel : UserModel;
         const user = await Model.findById(data.id);
-        if (!user) {
-            return done(new Error("User not found"), null);
-        }
+
+        if (!user) return done(new Error("User not found"), null);
+
         done(null, user);
     } catch (err) {
+        console.error("DeserializeUser Error:", err);
         done(err, null);
     }
 });
-
-export default passport;
