@@ -1,8 +1,7 @@
 import OTP from "../models/OTP.js";
-import UserModel from "../models/Users.js";
-import HouseOwnerModel from "../models/HouseOwners.js";
+
 import crypto from "crypto";
-// import AdminModel from "../models/AdminModel.js";
+import AdminModel from "../models/AdminModel.js";
 import axios from "axios";
 import express from "express";
 import bcrypt from "bcrypt";
@@ -49,10 +48,9 @@ export const requestPasswordReset = async (req, res) => {
     try {
         // 1. Check both schemas  
 
-        const userAccount = await UserModel.findOne({ email });
-        const ownerAccount = await HouseOwnerModel.findOne({ email });
+        const userAccount = await AdminModel.findOne({ email });
 
-        if (!userAccount && !ownerAccount) {
+        if (!userAccount) {
             return res.status(404).json({ message: "No account found with this email" });
         }
 
@@ -91,7 +89,7 @@ export const verifyAndResetPassword = async (req, res) => {
 
 
         // 2. Find who it belongs to
-        let account = await UserModel.findOne({ email }) || await HouseOwnerModel.findOne({ email });
+        let account = await AdminModel.findOne({ email })
 
         const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
 

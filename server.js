@@ -285,6 +285,7 @@ import payment from "./routes/payment.js";
 import resetpass from "./routes/resetpass.js";
 import kyc from "./routes/kyc.js"
 import superRoute from "./routes/super.js";
+import seperRoute from "./routes/supperreset.js"
 
 import "./auth/passport.js";
 
@@ -373,6 +374,7 @@ app.use("/api", payment);
 app.use("/api/resetpass", resetpass);
 app.use("/api/kyc", kyc); // added KYC route
 app.use("/super", superRoute);
+app.use("/superreset", seperRoute);
 
 app.get("/", (_req, res) => {
   res.send("server is on");

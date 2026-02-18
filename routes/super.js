@@ -35,7 +35,9 @@ const sendAdminWelcomeEmail = async (email, password, role) => {
                         <p style="margin: 5px 0;"><strong>Temporary Password:</strong> ${password}</p>
                     </div>
 
-                    <p style="margin-top: 20px;">You can log in at the Vizit Admin Portal. We recommend changing your password after your first login.</p>
+                    <p style="margin-top: 20px;">You can log in at the Vizit Admin Portal. 
+                    We recommend changing your password after your first login. use this link
+                     <a href='https://dashboard.vizit.homes/'>https://dashboard.vizit.homes/</a> </p>
                 </div>
                 <div style="background: #244531; color: white; padding: 15px; text-align: center; font-size: 12px;">
                     © 2026 Vizit Properties. All rights reserved.
