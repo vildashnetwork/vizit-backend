@@ -753,4 +753,92 @@ router.get("/allusers", async (req, res) => {
         });
     }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+router.get("/all-users", async (req, res) => {
+    try {
+        const [users, owners] = await Promise.all([
+            UserModel.find({}).select("-password"),
+            HouseOwnerModel.find({}).select("-password"),
+        ]);
+
+        // Combine and tag them so the frontend knows which collection they belong to
+        const combined = [
+            ...users.map((u) => ({ ...u._doc, collectionType: "user" })),
+            ...owners.map((o) => ({ ...o._doc, collectionType: "houseowner" })),
+        ];
+
+        res.status(200).json({
+            success: true,
+            count: combined.length,
+            users: combined,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+/**
+ * @route   PATCH /api/admin/update-status/:id
+ * @desc    Update account status and reason for a user or owner
+ */
+router.patch("/update-status/:id", async (req, res) => {
+    const { id } = req.params;
+    const { accountstatus, reason, collectionType } = req.body;
+
+    // Validate input
+    if (!["active", "suspended", "ban", "deactivated", "review"].includes(accountstatus)) {
+        return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    try {
+        let updatedUser;
+
+        // Check the specific collection based on the hint from frontend
+        if (collectionType === "houseowner") {
+            updatedUser = await HouseOwnerModel.findByIdAndUpdate(
+                id,
+                { $set: { accountstatus, reason } },
+                { new: true }
+            );
+        } else {
+            updatedUser = await UserModel.findByIdAndUpdate(
+                id,
+                { $set: { accountstatus, reason } },
+                { new: true }
+            );
+        }
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: "User not found in the database" });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Account set to ${accountstatus}`,
+            data: updatedUser,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+
+
 export default router;

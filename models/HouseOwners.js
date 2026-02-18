@@ -94,11 +94,21 @@ const paymentSchema = new mongoose.Schema(
 
 const houseOwnerSchema = new mongoose.Schema(
   {
+
+    accountstatus: {
+      type: String, enum: ["suspended", "ban", "active"],
+      default: "active"
+    },
+    reason: {
+      type: String
+    },
+
+
     googleId: { type: String, sparse: true },
 
 
 
-    companyEmail: { type: String},
+    companyEmail: { type: String },
     idSnapshot: { type: String },
     taxCardSnapshot: { type: String },
     selfieWithId: { type: String },
