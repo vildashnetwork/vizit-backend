@@ -52,6 +52,13 @@ const paymentSchema = new mongoose.Schema(
     phoneNumber: {
       type: String
     },
+    phone: {
+  type: String,
+  unique: true,
+  sparse: true, // <-- allows multiple nulls
+  trim: true
+},
+
 
     telecomOperator: {
       type: String,

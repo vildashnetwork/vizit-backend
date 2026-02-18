@@ -152,8 +152,12 @@ const houseOwnerSchema = new mongoose.Schema(
     },
 
     phone: {
-      type: String
+      type: String,
+      unique: true,
+      sparse: true, // <-- allows multiple nulls
+      trim: true
     },
+
 
     interest: {
       type: String
