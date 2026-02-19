@@ -430,38 +430,42 @@ router.put("/add/chat/idnow/:id", async (req, res) => {
 
 
 
-
 router.put("/add/chat/id/:id", async (req, res) => {
-  try {
-    const { id } = req.params;     // The ID from the URL (The person being updated)
-    const { chatId } = req.body;   // The ID from the body (The ID to be added to the array)
+    try {
+        const { id } = req.params;      // The person's ID (the one we are updating)
+        const { chatId } = req.body;    // The other person's ID (the one we are adding to the list)
 
-    // Update Users
-    const userUpdate = await UserModel.updateOne(
-      { _id: id },
-      { $addToSet: { allchatsId: String(chatId) } }
-    );
+        // Basic check to prevent 500 errors on invalid ObjectIds
+        if (id.length !== 24 || chatId.length !== 24) {
+            return res.status(400).json({ message: "Invalid ID format" });
+        }
 
-    if (userUpdate.matchedCount > 0) {
-      return res.status(200).json({ message: "Updated User" });
+        // Try updating Seeker/User (lowercase field)
+        const userUpdate = await UserModel.updateOne(
+            { _id: id },
+            { $addToSet: { allchatsId: String(chatId) } }
+        );
+
+        if (userUpdate.matchedCount > 0) {
+            return res.status(200).json({ message: "Updated Seeker List" });
+        }
+
+        // Try updating Owner (Capital C field)
+        const ownerUpdate = await HouseOwerModel.updateOne(
+            { _id: id },
+            { $addToSet: { allChatsId: String(chatId) } }
+        );
+
+        if (ownerUpdate.matchedCount > 0) {
+            return res.status(200).json({ message: "Updated Owner List" });
+        }
+
+        res.status(404).json({ message: "User/Owner not found" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server Error" });
     }
-
-    // Update Owners
-    const ownerUpdate = await HouseOwnerModel.updateOne(
-      { _id: id },
-      { $addToSet: { allChatsId: String(chatId) } }
-    );
-
-    if (ownerUpdate.matchedCount > 0) {
-      return res.status(200).json({ message: "Updated Owner" });
-    }
-
-    res.status(404).json({ message: "ID not found" });
-  } catch (err) {
-    res.status(500).json({ message: "Server Error" });
-  }
 });
-
 
 
 
