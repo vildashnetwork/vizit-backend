@@ -391,7 +391,7 @@ router.put("/add/chat/id/:id", async (req, res) => {
         }
 
         /* --------------------------------
-           1. Try USER first
+           1. Try USER first (uses lowercase c)
         -------------------------------- */
         const userResult = await UserModel.updateOne(
             { _id: id },
@@ -406,11 +406,11 @@ router.put("/add/chat/id/:id", async (req, res) => {
         }
 
         /* --------------------------------
-           2. Try HOUSE OWNER
+           2. Try HOUSE OWNER (Fixed to capital C)
         -------------------------------- */
-        const ownerResult = await HouseOwerModel.updateOne(
+        const ownerResult = await HouseOwnerModel.updateOne(
             { _id: id },
-            { $addToSet: { allChatsId: String(chatId) } }
+            { $addToSet: { allChatsId: String(chatId) } } // Fixed: allChatsId
         );
 
         if (ownerResult.matchedCount > 0) {
@@ -420,21 +420,13 @@ router.put("/add/chat/id/:id", async (req, res) => {
             });
         }
 
-        /* --------------------------------
-           3. Not found in both
-        -------------------------------- */
-        return res.status(404).json({
-            message: "User or House Owner not found"
-        });
+        return res.status(404).json({ message: "User or House Owner not found" });
 
     } catch (error) {
         console.error("Add chat error:", error);
-        res.status(500).json({
-            message: "Internal server error"
-        });
+        res.status(500).json({ message: "Internal server error" });
     }
 });
-
 
 
 
