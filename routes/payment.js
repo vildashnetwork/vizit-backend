@@ -798,47 +798,108 @@ router.get("/all-users", async (req, res) => {
  * @route   PATCH /api/admin/update-status/:id
  * @desc    Update account status and reason for a user or owner
  */
+// router.patch("/update-status/:id", async (req, res) => {
+//     const { id } = req.params;
+//     const { accountstatus, reason, collectionType } = req.body;
+
+//     // Validate input
+//     if (!["active", "suspended", "ban", "deactivated", "review"].includes(accountstatus)) {
+//         return res.status(400).json({ message: "Invalid status value" });
+//     }
+
+//     try {
+//         let updatedUser;
+
+//         // Check the specific collection based on the hint from frontend
+//         if (collectionType === "houseowner") {
+//             updatedUser = await HouseOwnerModel.findByIdAndUpdate(
+//                 id,
+//                 { $set: { accountstatus, reason } },
+//                 { new: true }
+//             );
+//         } else {
+//             updatedUser = await UserModel.findByIdAndUpdate(
+//                 id,
+//                 { $set: { accountstatus, reason } },
+//                 { new: true }
+//             );
+//         }
+
+//         if (!updatedUser) {
+//             return res.status(404).json({ message: "User not found in the database" });
+//         }
+
+//         res.status(200).json({
+//             success: true,
+//             message: `Account set to ${accountstatus}`,
+//             data: updatedUser,
+//         });
+//     } catch (error) {
+//         res.status(500).json({ success: false, message: error.message });
+//     }
+// });
+
 router.patch("/update-status/:id", async (req, res) => {
     const { id } = req.params;
     const { accountstatus, reason, collectionType } = req.body;
 
-    // Validate input
-    if (!["active", "suspended", "ban", "deactivated", "review"].includes(accountstatus)) {
-        return res.status(400).json({ message: "Invalid status value" });
+    // 1. Rigorous Validation
+    const validStatuses = ["active", "suspended", "ban", "deactivated", "review"];
+    if (!validStatuses.includes(accountstatus)) {
+        return res.status(400).json({
+            success: false,
+            message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`
+        });
     }
 
     try {
-        let updatedUser;
+        let updatedUser = null;
 
-        // Check the specific collection based on the hint from frontend
-        if (collectionType === "houseowner") {
+        // Debugging log to see what's hitting the server
+        console.log(`[Admin Action] Updating ID: ${id} | Collection: ${collectionType} | Status: ${accountstatus}`);
+
+        // 2. Flexible Collection Check
+        // We check for "houseowner" or "owner" to prevent 404s from frontend naming mismatches
+        const isOwner = collectionType === "houseowner" || collectionType === "owner";
+
+        if (isOwner) {
             updatedUser = await HouseOwnerModel.findByIdAndUpdate(
                 id,
-                { $set: { accountstatus, reason } },
-                { new: true }
+                { $set: { accountstatus, reason: reason || "No reason provided" } },
+                { new: true, runValidators: true }
             );
         } else {
             updatedUser = await UserModel.findByIdAndUpdate(
                 id,
-                { $set: { accountstatus, reason } },
-                { new: true }
+                { $set: { accountstatus, reason: reason || "No reason provided" } },
+                { new: true, runValidators: true }
             );
         }
 
+        // 3. Precise Error Handling
         if (!updatedUser) {
-            return res.status(404).json({ message: "User not found in the database" });
+            console.error(`[Error] User with ID ${id} not found in ${isOwner ? 'HouseOwner' : 'User'} collection`);
+            return res.status(404).json({
+                success: false,
+                message: `Account not found in the ${isOwner ? 'House Owner' : 'Seeker'} database.`
+            });
         }
 
+        // 4. Success Response
+        console.log(`[Success] ${updatedUser.email} is now ${accountstatus}`);
         res.status(200).json({
             success: true,
-            message: `Account set to ${accountstatus}`,
+            message: `Account has been successfully set to ${accountstatus}`,
             data: updatedUser,
         });
+
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error("[Fatal Error] Update Status failed:", error.message);
+        res.status(500).json({
+            success: false,
+            message: "Internal Server Error: " + error.message
+        });
     }
 });
-
-
 
 export default router;

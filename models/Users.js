@@ -53,11 +53,11 @@ const paymentSchema = new mongoose.Schema(
       type: String
     },
     phone: {
-  type: String,
-  unique: true,
-  sparse: true, // <-- allows multiple nulls
-  trim: true
-},
+      type: String,
+      unique: true,
+      sparse: true, // <-- allows multiple nulls
+      trim: true
+    },
 
 
     telecomOperator: {
@@ -114,7 +114,7 @@ const userSchema = new mongoose.Schema(
     googleId: { type: String, sparse: true },
     accountstatus: {
       type: String,
-      enum: ["active", "suspended", "deactivated", "review"],
+      enum: ["active", "suspended", "deactivated", "review", "ban"],
       default: "active"
 
     },
