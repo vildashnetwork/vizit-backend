@@ -48,27 +48,29 @@ const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me";
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-jwt";
 const FRONTEND = "https://www.vizit.homes";
-// const ALLOWED_ORIGINS = [
-//   "http://localhost:5173",
-//   "http://localhost:5174",
-//   "https://vizit-seven.vercel.app",
-//   FRONTEND,
-// ];
 
-// -------------------- MIDDLEWARE --------------------
 
-// CORS
-// app.use(
-//   cors({
-//     origin: (origin, callback) => {
-//       // allow requests with no origin (like mobile apps, curl, postman)
-//       if (!origin) return callback(null, true);
-//       if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-//       return callback(new Error("CORS policy: origin not allowed"), false);
-//     },
-//     credentials: true,
-//   })
-// );
+
+
+
+app.use(cors({
+  origin: [
+    "https://www.vizit.homes",
+    "https://dashboard.vizit.homes",
+    "https://vizithomes.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "https://vizit-seven.vercel.app",
+    "https://wicichats.vercel.app",
+    "https://vizit-homes-k2n7.onrender.com",
+    "http://169.254.237.117:8080",
+    "http://localhost:8080",
+    "http://192.168.43.221:8080",
+  ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
 
 // Security + logging + parsers
 app.use(

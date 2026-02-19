@@ -236,6 +236,29 @@ app.use(cors());
 
 const httpServer = createServer(app);
 
+// const io = new Server(httpServer, {
+//     cors: {
+//         origin: [
+//             "https://www.vizit.homes",
+//             "https://dashboard.vizit.homes",
+//             "https://vizithomes.vercel.app",
+//             "http://localhost:5173",
+//             "http://localhost:5174",
+//             "https://vizit-seven.vercel.app",
+//             "https://wicichats.vercel.app",
+//             "https://vizit-homes-k2n7.onrender.com",
+//             "http://169.254.237.117:8080",
+//             "http://localhost:8080",
+//             "http://192.168.43.221:8080",
+
+
+//         ],
+//         credentials: true,
+//     },
+//     transports: ["websocket", "polling"],
+// });
+
+
 const io = new Server(httpServer, {
     cors: {
         origin: [
@@ -250,14 +273,14 @@ const io = new Server(httpServer, {
             "http://169.254.237.117:8080",
             "http://localhost:8080",
             "http://192.168.43.221:8080",
-
-
         ],
+        // ADD THESE LINES BELOW:
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
         credentials: true,
     },
     transports: ["websocket", "polling"],
 });
-
 /**
  * userSocketMap: Map<userId, Set<socketId>>
  */
