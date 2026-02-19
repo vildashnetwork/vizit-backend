@@ -154,7 +154,7 @@ router.get("/decode/token/owner", async (req, res) => {
             });
         }
 
-        const owner = await HouseOwerModel.findById(result.payload.id);
+        const owner = await HouseOwerModel.findOne({ email: result.payload.email });
 
         if (!owner) {
             return res.status(404).json({ message: "Owner not found" });
