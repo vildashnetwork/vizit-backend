@@ -144,27 +144,76 @@ router.post("/login", async (req, res) => {
 });
 
 
+// router.get("/decode/token/owner", async (req, res) => {
+//     try {
+//         const result = decodeTokenFromReq(req);
+
+//         if (!result || !result.ok) {
+//             return res.status(result?.status || 401).json({
+//                 message: result?.message || "Failed to decode token"
+//             });
+//         }
+
+//         const owner = await HouseOwerModel.findOne({ email: result.payload.email });
+
+//         if (!owner) {
+//             return res.status(404).json({ message: "Owner not found" });
+//         }
+
+
+//         if (
+//             owner.verified &&
+//             owner.verificationexpirydate &&
+//             new Date() > owner.verificationexpirydate
+//         ) {
+//             owner.verified = false;
+//             owner.verificationbalance = 0;
+//             owner.dateofverification = null;
+//             owner.verificationexpirydate = null;
+
+//             await owner.save();
+//         }
+
+//         return res.status(200).json({ res: owner });
+
+//     } catch (error) {
+//         console.error("Token decode error:", error);
+//         res.status(500).json({ message: "Internal server error" });
+//     }
+// });
+
+
+
 router.get("/decode/token/owner", async (req, res) => {
     try {
         const result = decodeTokenFromReq(req);
 
+        // 1. Check if token decoding was successful
         if (!result || !result.ok) {
             return res.status(result?.status || 401).json({
                 message: result?.message || "Failed to decode token"
             });
         }
 
-        const owner = await HouseOwerModel.findOne({ email: result.payload.email });
+        // 2. Locate the owner using email (primary) or id (fallback)
+        // Ensure result.payload contains the email field
+        const query = result.payload.email
+            ? { email: result.payload.email }
+            : { _id: result.payload.id };
+
+        // Note: Corrected "HouseOwerModel" to "HouseOwnerModel"
+        const owner = await HouseOwerModel.findOne(query);
 
         if (!owner) {
+            console.error("Owner lookup failed for query:", query);
             return res.status(404).json({ message: "Owner not found" });
         }
 
-
+        // 3. Handle Verification Expiry Logic
         if (
             owner.verified &&
             owner.verificationexpirydate &&
-            new Date() > owner.verificationexpirydate
+            new Date() > new Date(owner.verificationexpirydate)
         ) {
             owner.verified = false;
             owner.verificationbalance = 0;
@@ -174,6 +223,7 @@ router.get("/decode/token/owner", async (req, res) => {
             await owner.save();
         }
 
+        // 4. Return the owner data
         return res.status(200).json({ res: owner });
 
     } catch (error) {
