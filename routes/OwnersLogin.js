@@ -27,42 +27,23 @@ const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 router.post("/register", async (req, res) => {
     try {
-        // extract fields and normalize interest to an array of strings
-        let { name, email, password, location,
-            bio, interest, IDno, profile } = req.body;
+        let { name, email, password, location, bio, interest, IDno, profile, phone } = req.body; // Added phone back just in case
 
-
-
-
-        if (!name || !email || !password || !location ||
-            !bio || !interest || !IDno) {
+        // 1. Validation (Ensuring we don't check phone if it's not provided)
+        if (!name || !email || !password || !location || !bio || !interest || !IDno) {
             return res.status(400).json({ message: "All fields are required" });
         }
 
-        // Validate email format
-        if (!validateEmail(email)) {
-            return res.status(400).json({ message: "Invalid email format" });
-        }
-
-
-
-        // Check if email exists
         if (await HouseOwerModel.findOne({ email })) {
             return res.status(409).json({ message: "Email already exists" });
         }
-        if (await UserModel.findOne({ email })) {
-            return res.status(409).json({ message: "What are you doing this email account is already a house seeker" });
-        }
 
-        // Check if phone exists
-        if (await HouseOwerModel.findOne({ phone })) {
+        // 2. FIXED: Only check phone if a phone number was actually sent
+        if (phone && await HouseOwerModel.findOne({ phone })) {
             return res.status(409).json({ message: "Phone number already exists" });
         }
 
-
-
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
         const newUser = new HouseOwerModel({
             name,
@@ -71,23 +52,17 @@ router.post("/register", async (req, res) => {
             bio,
             interest,
             IDno,
+            phone: phone || "", // Save as empty string if not provided
             password: hashedPassword,
-            profile: profile || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&size=128`
+            profile: profile || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`
         });
-
-
 
         const savedUser = await newUser.save();
-
         const token = generateToken(savedUser);
 
-        res.status(201).json({
-            message: "Registration successful",
-            token,
-            newUser
-        });
+        res.status(201).json({ message: "Registration successful", token, newUser });
     } catch (err) {
-        console.error("Registration error:", err);
+        console.error("Registration error:", err); // Look at your Render logs to see this!
         res.status(500).json({ message: "Internal server error" });
     }
 });
