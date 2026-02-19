@@ -7,21 +7,54 @@ import HouseOwerModel from "../../models/HouseOwners.js";
 import { upload } from '../multerConfig.js';
 
 // import { emitToUser } from "../../helpers/socketHelpers.js";
+// export const getUsersForSidebar = async (req, res) => {
+//     try {
+//         const { loggedInUserId } = req.params;
+//         const filteredUsers = await UserModel.find({ _id: { $ne: loggedInUserId } }).select('-password');
+//         const filteredOwners = await HouseOwerModel.find({ _id: { $ne: loggedInUserId } }).select('-password');
+//         if (!filteredUsers || !filteredOwners) {
+//             return res.status(404).json({ message: "No users found" });
+//         }
+//         res.status(200).json({ filteredUsers, filteredOwners });
+//     } catch (error) {
+//         console.log("Error in getUsersForSidebar: ", error.message);
+//         res.status(500).json({ error: "Internal Server Error" });
+//     }
+// }
+
+
+
 export const getUsersForSidebar = async (req, res) => {
     try {
         const { loggedInUserId } = req.params;
-        const filteredUsers = await UserModel.find({ _id: { $ne: loggedInUserId } }).select('-password');
-        const filteredOwners = await HouseOwerModel.find({ _id: { $ne: loggedInUserId } }).select('-password');
-        if (!filteredUsers || !filteredOwners) {
-            return res.status(404).json({ message: "No users found" });
+
+        // 1. Find the logged-in person (Check both User and Owner models)
+        const me = await UserModel.findById(loggedInUserId) ||
+            await HouseOwerModel.findById(loggedInUserId);
+
+        if (!me) {
+            return res.status(404).json({ message: "User not found" });
         }
+
+        // 2. Get the array of IDs from the document
+        // We check both lowercase 'c' and uppercase 'C' to be safe
+        const chatIds = me.allchatsId || me.allChatsId || [];
+
+        // 3. ONLY fetch users/owners whose IDs are in that array
+        const filteredUsers = await UserModel.find({
+            _id: { $in: chatIds }
+        }).select('-password');
+
+        const filteredOwners = await HouseOwerModel.find({
+            _id: { $in: chatIds }
+        }).select('-password');
+
         res.status(200).json({ filteredUsers, filteredOwners });
     } catch (error) {
         console.log("Error in getUsersForSidebar: ", error.message);
         res.status(500).json({ error: "Internal Server Error" });
     }
 }
-
 
 export const getMessages = async (req, res) => {
     try {
