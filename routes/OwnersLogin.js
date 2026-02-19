@@ -449,7 +449,7 @@ router.put("/add/chat/id/:id", async (req, res) => {
 
         // 2. Check HouseOwner Model (allChatsId - capital C)
         // Ensure you use "HouseOwnerModel" with the "n"
-        const ownerResult = await HouseOwnerModel.updateOne(
+        const ownerResult = await HouseOwerModel.updateOne(
             { _id: id },
             { $addToSet: { allChatsId: String(chatId) } }
         );
