@@ -240,6 +240,7 @@ const io = new Server(httpServer, {
     cors: {
         origin: [
             "https://www.vizit.homes",
+            "https://dashboard.vizit.homes",
             "https://vizithomes.vercel.app",
             "http://localhost:5173",
             "http://localhost:5174",
@@ -249,7 +250,7 @@ const io = new Server(httpServer, {
             "http://169.254.237.117:8080",
             "http://localhost:8080",
             "http://192.168.43.221:8080",
-            "https://dashboard.vizit.homes",
+
 
         ],
         credentials: true,
