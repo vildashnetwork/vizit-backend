@@ -29,13 +29,13 @@ router.post("/register", async (req, res) => {
     try {
         // extract fields and normalize interest to an array of strings
         let { name, email, password, location,
-            companyname, bio, phone, interest, IDno, profile } = req.body;
+            bio, phone, interest, IDno, profile } = req.body;
 
 
 
 
         if (!name || !email || !password || !location ||
-            !companyname || !bio || !phone || !interest || !IDno) {
+            !bio || !phone || !interest || !IDno) {
             return res.status(400).json({ message: "All fields are required" });
         }
 
@@ -70,7 +70,6 @@ router.post("/register", async (req, res) => {
             name,
             email,
             location,
-            companyname,
             bio,
             phone,
             interest,
