@@ -410,7 +410,7 @@ router.put("/add/chat/id/:id", async (req, res) => {
         -------------------------------- */
         const ownerResult = await HouseOwerModel.updateOne(
             { _id: id },
-            { $addToSet: { allchatsId: String(chatId) } }
+            { $addToSet: { allChatsId: String(chatId) } }
         );
 
         if (ownerResult.matchedCount > 0) {
