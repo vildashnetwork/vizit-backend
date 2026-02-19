@@ -381,54 +381,90 @@ router.put("/add/chat/idnow/:id", async (req, res) => {
 });
 
 
+// router.put("/add/chat/id/:id", async (req, res) => {
+//     try {
+//         const { id } = req.params;
+//         const { chatId } = req.body;
+
+//         if (!chatId) {
+//             return res.status(400).json({ message: "chatId is required" });
+//         }
+
+//         /* --------------------------------
+//            1. Try USER first (uses lowercase c)
+//         -------------------------------- */
+//         const userResult = await UserModel.updateOne(
+//             { _id: id },
+//             { $addToSet: { allchatsId: String(chatId) } }
+//         );
+
+//         if (userResult.matchedCount > 0) {
+//             return res.status(200).json({
+//                 message: "Chat added to user successfully",
+//                 model: "user"
+//             });
+//         }
+
+//         /* --------------------------------
+//            2. Try HOUSE OWNER (Fixed to capital C)
+//         -------------------------------- */
+//         const ownerResult = await HouseOwnerModel.updateOne(
+//             { _id: id },
+//             { $addToSet: { allChatsId: String(chatId) } } // Fixed: allChatsId
+//         );
+
+//         if (ownerResult.matchedCount > 0) {
+//             return res.status(200).json({
+//                 message: "Chat added to owner successfully",
+//                 model: "houseowner"
+//             });
+//         }
+
+//         return res.status(404).json({ message: "User or House Owner not found" });
+
+//     } catch (error) {
+//         console.error("Add chat error:", error);
+//         res.status(500).json({ message: "Internal server error" });
+//     }
+// });
+
 router.put("/add/chat/id/:id", async (req, res) => {
     try {
-        const { id } = req.params;
-        const { chatId } = req.body;
+        const { id } = req.params; // This is the Person's ID (User or Owner)
+        const { chatId } = req.body; // This is the Room ID
 
         if (!chatId) {
             return res.status(400).json({ message: "chatId is required" });
         }
 
-        /* --------------------------------
-           1. Try USER first (uses lowercase c)
-        -------------------------------- */
+        // 1. Check User Model first (allchatsId - lowercase c)
         const userResult = await UserModel.updateOne(
             { _id: id },
             { $addToSet: { allchatsId: String(chatId) } }
         );
 
         if (userResult.matchedCount > 0) {
-            return res.status(200).json({
-                message: "Chat added to user successfully",
-                model: "user"
-            });
+            return res.status(200).json({ message: "Added to user", model: "user" });
         }
 
-        /* --------------------------------
-           2. Try HOUSE OWNER (Fixed to capital C)
-        -------------------------------- */
+        // 2. Check HouseOwner Model (allChatsId - capital C)
+        // Ensure you use "HouseOwnerModel" with the "n"
         const ownerResult = await HouseOwnerModel.updateOne(
             { _id: id },
-            { $addToSet: { allChatsId: String(chatId) } } // Fixed: allChatsId
+            { $addToSet: { allChatsId: String(chatId) } }
         );
 
         if (ownerResult.matchedCount > 0) {
-            return res.status(200).json({
-                message: "Chat added to owner successfully",
-                model: "houseowner"
-            });
+            return res.status(200).json({ message: "Added to owner", model: "houseowner" });
         }
 
-        return res.status(404).json({ message: "User or House Owner not found" });
+        return res.status(404).json({ message: "Recipient ID not found in Users or Owners" });
 
     } catch (error) {
-        console.error("Add chat error:", error);
+        console.error("Backend Error:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
-
-
 
 
 
