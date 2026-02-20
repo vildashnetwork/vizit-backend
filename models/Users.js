@@ -106,7 +106,7 @@ const userSchema = new mongoose.Schema(
 
     referalbalance: {
       type: Number,
-      default: 0
+      default: 50
     },
     accountstatus: {
       type: String, enum: ["suspended", "ban", "active"],
