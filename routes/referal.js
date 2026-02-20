@@ -21,7 +21,7 @@ router.put("/save-referal/:id", async (req, res) => {
             return res.status(400).json({ message: "Owner already has a referral code" });
         }
         const { referralCode } = req.body;
-        const referrer = await UserModel.findOne({ referralCode });
+        const referrer = await UserModel.findOne({ _id: referralCode });
         if (!referrer) {
             return res.status(404).json({ message: "Referrer not found" });
         }
