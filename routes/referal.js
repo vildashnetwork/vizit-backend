@@ -59,4 +59,83 @@ const approveKYC = async (req, res) => {
 
 router.put("/approve/:id", approveKYC);
 
+
+
+
+
+
+const NKWA_BASE_URL = process.env.NKWA_BASE_URL;
+const NKWA_API_KEY = process.env.API_KEY;
+
+router.post("/payments/:id", async (req, res) => {
+    const { phone, amount } = req.body;
+    const userId = req.params.id;
+
+    // 1. Basic Input Validation
+    if (!phone || !amount || amount <= 0) {
+        return res.status(400).json({
+            success: false,
+            error: "Valid phone and amount are required"
+        });
+    }
+
+    try {
+        // 2. Fetch the user and check balance
+        const user = await UserModel.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, error: "User not found" });
+        }
+
+        // Ensure we handle the balance as a number
+        const currentBalance = Number(user.referalbalance || 0);
+        const withdrawAmount = parseInt(amount);
+
+        if (currentBalance < withdrawAmount) {
+            return res.status(400).json({
+                success: false,
+                error: `Insufficient balance. Available: ${currentBalance} frs`
+            });
+        }
+
+        // 3. Call Nkwa API to disburse funds
+        const response = await axios.post(
+            `${NKWA_BASE_URL}/disburse`,
+            {
+                phoneNumber: String(phone),
+                amount: withdrawAmount,
+            },
+            {
+                headers: {
+                    "X-API-Key": NKWA_API_KEY,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+
+        // 4. If payment API is successful, deduct the balance
+        // We use $inc with a negative value to ensure atomicity
+        user.referalbalance = currentBalance - withdrawAmount;
+        await user.save();
+
+        // 5. Return success
+        res.status(201).json({
+            success: true,
+            message: "Disbursement successful and balance updated",
+            newBalance: user.referalbalance,
+            data: response.data
+        });
+
+    } catch (err) {
+        const statusCode = err.response?.status || 500;
+        const errorData = err.response?.data || { message: err.message };
+
+        console.error("Payment Process failed:", errorData);
+
+        res.status(statusCode).json({
+            success: false,
+            error: errorData,
+        });
+    }
+});
+
 export default router;
