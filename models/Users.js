@@ -104,6 +104,10 @@ const paymentSchema = new mongoose.Schema(
 const userSchema = new mongoose.Schema(
   {
 
+    referalbalance: {
+      type: Number,
+      default: 0
+    },
     accountstatus: {
       type: String, enum: ["suspended", "ban", "active"],
       default: "active"

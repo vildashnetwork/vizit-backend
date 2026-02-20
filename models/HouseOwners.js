@@ -95,6 +95,17 @@ const paymentSchema = new mongoose.Schema(
 const houseOwnerSchema = new mongoose.Schema(
   {
 
+
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      sparse: true
+    },
+    isReferralPaid: {
+      type: Boolean,
+      default: false
+    },
+
     accountstatus: {
       type: String, enum: ["suspended", "ban", "active"],
       default: "active"
@@ -154,7 +165,7 @@ const houseOwnerSchema = new mongoose.Schema(
     phone: {
       type: String,
       unique: true,
-      sparse: true, // <-- allows multiple nulls
+      sparse: true,
       trim: true
     },
 
