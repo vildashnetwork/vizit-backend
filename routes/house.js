@@ -362,6 +362,32 @@ router.post("/check/:houseId/:ownerId", async (req, res) => {
 
 
 
+// update  house details by the owner only
+router.put("/houses/:id", async (req, res) => {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid house ID" });
+    }
+
+    try {
+        const updatedHouse = await HouseModel.findByIdAndUpdate(
+            id,
+            { $set: req.body },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedHouse) {
+            return res.status(404).json({ message: "House not found" });
+        }
+
+        res.status(200).json({ message: "House updated successfully", house: updatedHouse });
+    } catch (err) {
+        console.error("Update house error:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
 
 
 
