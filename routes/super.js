@@ -169,7 +169,7 @@ router.get("/decode/token/admin", async (req, res) => {
         }
 
         // FIX: Search by email because 'id' is missing in your seeker token
-        const user = await AdminModel.findOne({ email: result.payload.email });
+        const user = await AdminModel.findOneById({ email: result.payload.id });
 
         if (!user) {
             return res.status(404).json({ message: "Admin not found" });
