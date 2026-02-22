@@ -200,16 +200,12 @@ router.get("/decode/token/admin", async (req, res) => {
             return res.status(result.status).json({ message: result.message });
         }
 
-        /**
-         * FIX: 
-         * 1. Use .findOne() for custom field queries.
-         * 2. Assuming result.payload.id contains the email as per your comment.
-         * 3. .select("-password") to keep the response secure.
-         */
-        const user = await AdminModel.findOne({ email: result.payload.id }).select("-password");
+        // CHANGE: Use findById because your token stores the admin._id as 'id'
+        const user = await AdminModel.findById(result.payload.id).select("-password");
 
         if (!user) {
-            return res.status(404).json({ message: "Admin not found with provided token identity" });
+            // This triggers if the ID in the token doesn't exist in the DB anymore
+            return res.status(404).json({ message: "Admin not found" });
         }
 
         return res.status(200).json({ user });
