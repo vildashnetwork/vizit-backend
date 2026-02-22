@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import axios from "axios";
 import AdminModel from "../models/AdminModel.js";
-import decodeTokenFromReq from "./decode.js";
+import jwt from "jsonwebtoken";
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -158,24 +158,61 @@ router.delete("/delete/:id", async (req, res) => {
 });
 
 
+
+
+
+function decodeTokenFromReq(req) {
+    // Look for token in Header (Authorization: Bearer <token>) or Body
+    const authHeader = req.headers.authorization;
+    const token = (authHeader && authHeader.startsWith("Bearer "))
+        ? authHeader.split(" ")[1]
+        : req.body?.token;
+
+    if (!token) {
+        return { ok: false, status: 401, message: "Authentication token missing" };
+    }
+
+    try {
+        if (!process.env.JWT_SECRET) {
+            console.error("JWT_SECRET is not defined in environment variables");
+            return { ok: false, status: 500, message: "Server configuration error" };
+        }
+
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        return { ok: true, payload };
+    } catch (err) {
+        const isExpired = err.name === "TokenExpiredError";
+        return {
+            ok: false,
+            status: 401,
+            message: isExpired ? "Token expired" : "Invalid token"
+        };
+    }
+}
+
+// decode token and get admin
 // decode token and get admin
 router.get("/decode/token/admin", async (req, res) => {
     try {
         const result = decodeTokenFromReq(req);
-        if (!result || !result.ok) {
-            return res.status(result?.status || 401).json({
-                message: result?.message || "Failed to decode token"
-            });
+
+        if (!result.ok) {
+            return res.status(result.status).json({ message: result.message });
         }
 
-        // FIX: Search by email because 'id' is missing in your seeker token
-        const user = await AdminModel.findOneById({ email: result.payload.id });
+        /**
+         * FIX: 
+         * 1. Use .findOne() for custom field queries.
+         * 2. Assuming result.payload.id contains the email as per your comment.
+         * 3. .select("-password") to keep the response secure.
+         */
+        const user = await AdminModel.findOne({ email: result.payload.id }).select("-password");
 
         if (!user) {
-            return res.status(404).json({ message: "Admin not found" });
+            return res.status(404).json({ message: "Admin not found with provided token identity" });
         }
 
-        return res.status(200).json({ user: user });
+        return res.status(200).json({ user });
     } catch (error) {
         console.error("Token decode error:", error);
         res.status(500).json({ message: "Internal server error" });
