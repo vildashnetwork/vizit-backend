@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import axios from "axios";
 import AdminModel from "../models/AdminModel.js";
+import decodeTokenFromReq from "./decode.js";
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -155,5 +156,31 @@ router.delete("/delete/:id", async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
+
+
+// decode token and get admin
+router.get("/decode/token/admin", async (req, res) => {
+    try {
+        const result = decodeTokenFromReq(req);
+        if (!result || !result.ok) {
+            return res.status(result?.status || 401).json({
+                message: result?.message || "Failed to decode token"
+            });
+        }
+
+        // FIX: Search by email because 'id' is missing in your seeker token
+        const user = await AdminModel.findOne({ email: result.payload.email });
+
+        if (!user) {
+            return res.status(404).json({ message: "Admin not found" });
+        }
+
+        return res.status(200).json({ user: user });
+    } catch (error) {
+        console.error("Token decode error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
 
 export default router;
