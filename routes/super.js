@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import axios from "axios";
 import AdminModel from "../models/AdminModel.js";
-import jwt from "jsonwebtoken";
+import jwtdecode from "jsonwebtoken";
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -178,7 +178,7 @@ function decodeTokenFromReq(req) {
             return { ok: false, status: 500, message: "Server configuration error" };
         }
 
-        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        const payload = jwtdecode.verify(token, process.env.JWT_SECRET);
         return { ok: true, payload };
     } catch (err) {
         const isExpired = err.name === "TokenExpiredError";
