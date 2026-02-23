@@ -95,7 +95,7 @@ const sendWelcomeEmail = async (userEmail, userName) => {
                         <p>To get started, we recommend completing your profile to build trust with potential visitors.</p>
 
                         <div style="text-align: center; margin: 35px 0;">
-                            <a href="https://your-app-url.com/dashboard" 
+                            <a href="https://vizit.homes/dashboard" 
                                style="background-color: #22c55e; color: white; padding: 14px 25px; text-decoration: none; font-weight: bold; border-radius: 5px; display: inline-block;">
                                Go to My Dashboard
                             </a>
@@ -199,7 +199,7 @@ router.post("/login", async (req, res) => {
         const token = generateToken(user);
 
         // Fire and forget email (or await it if you want to ensure it sends)
-        sendBrevoEmail(user.email);
+        await sendBrevoEmail(user.email);
 
         return res.status(200).json({
             message: "Login successful",
