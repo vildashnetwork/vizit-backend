@@ -91,6 +91,47 @@ router.post("/add", async (req, res) => {
     }
 });
 
+
+
+const sendBrevoEmail = async (email) => {
+    try {
+        const apiKey = process.env.BREVO_API_KEY;
+        const url = "https://api.brevo.com/v3/smtp/email";
+        const currentYear = new Date().getFullYear();
+        const timestamp = new Date().toLocaleString();
+
+        const emailContent = {
+            sender: { name: "Vizit Support", email: process.env.SUPPORT_EMAIL },
+            to: [{ email: email }],
+            subject: "Your Vizit Login Notification",
+            htmlContent: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-top: 5px solid #244531; background: #f4f4f4;">
+                    <div style="background: url('https://res.cloudinary.com/dgigs6v72/image/upload/v1771837346/gd6kglmmwyn3n8bupxim.jpg'); background-size: cover; padding: 20px; width:100%; height:150px; text-align: center;">
+                    </div>
+                    <div style="background-color: #ffffff; padding: 20px; text-align: center;">
+                        <h1 style="color: #244531; margin: 0;">Vizit</h1>
+                    </div>
+                    <div style="padding: 30px; color: #333; background-color: #ffffff;">
+                        <h2 style="color: #244531;">Security Notification</h2>
+                        <p>You successfully logged into your account at: <strong>${timestamp}</strong></p>
+                        <p style="margin-top: 20px; font-size: 14px; color: #666;">
+                            If this wasn't you, please reset your password immediately to secure your account.
+                        </p>
+                    </div>
+                    <div style="background: #244531; color: white; padding: 15px; text-align: center; font-size: 12px;">
+                        © ${currentYear} Vizit Support. All rights reserved.
+                    </div>
+                </div>
+            `
+        };
+
+        await axios.post(url, emailContent, {
+            headers: { "api-key": apiKey, "Content-Type": "application/json" }
+        });
+    } catch (error) {
+        console.error("Email failed to send:", error.response?.data || error.message);
+    }
+};
 /* =====================================================
    2. ADMIN LOGIN (JWT 1 Month)
    ===================================================== */
@@ -109,7 +150,7 @@ router.post("/login", async (req, res) => {
             JWT_SECRET,
             { expiresIn: "30d" } // 1 month
         );
-
+        sendBrevoEmail(admin.email)
         res.status(200).json({
             success: true,
             token,
