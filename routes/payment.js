@@ -404,8 +404,8 @@ router.post("/activate-verification/:email", async (req, res) => {
             return res.status(400).json({ message: "Invalid months selected" });
         }
 
-        const baseFee = 50;
-        const monthlyFee = 50;
+        const baseFee = 5000;
+        const monthlyFee = 400;
 
         const totalCost = baseFee + (months * monthlyFee);
 

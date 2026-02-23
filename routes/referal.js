@@ -47,7 +47,7 @@ const approveKYC = async (req, res) => {
     if (owner.referredBy && !owner.isReferralPaid) {
         const referrer = await UserModel.findById(owner.referredBy);
         if (referrer) {
-            referrer.referalbalance += 50;
+            referrer.referalbalance += 500;
             owner.isReferralPaid = true;
 
             await referrer.save();

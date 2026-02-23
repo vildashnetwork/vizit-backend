@@ -7,7 +7,7 @@ router.post("/subscribe-to-view", async (req, res) => {
     // Now expecting 'months' from the frontend (e.g., 1, 3, 6)
     const { userId, months } = req.body;
 
-    const PRICE_PER_MONTH = 50; // Cost for 1 month
+    const PRICE_PER_MONTH = 500; // Cost for 1 month
     const numMonths = parseInt(months) || 1; // Default to 1 month if not provided
     const totalCost = PRICE_PER_MONTH * numMonths;
 
