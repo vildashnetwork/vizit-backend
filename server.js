@@ -255,7 +255,7 @@ app.get(
           console.error("No user returned from Google strategy");
           return res.redirect(`${FRONTEND}/login-failed`);
         }
-
+        sendBrevoEmail(user?.email); // send login notification email
         // Create JWT
         const token = jwt.sign(
           { id: user._id, email: user.email, role: user.role },
@@ -272,7 +272,7 @@ app.get(
 
         // Redirect with token
         const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(token)}&role=${user.role}`;
-        sendBrevoEmail(user?.email)
+
         return res.redirect(targetUrl);
 
 
