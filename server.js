@@ -202,45 +202,6 @@ app.get("/auth/google", (req, res, next) => {
   })(req, res, next);
 });
 
-
-const sendBrevoEmail = async (email) => {
-  const apiKey = process.env.BREVO_API_KEY;
-  const url = "https://api.brevo.com/v3/smtp/email";
-
-  const emailContent = {
-    sender: { name: "Vizit Support", email: process.env.SUPPORT_EMAIL },
-    to: [{ email: email }],
-    subject: "Your Vizit Login Notification",
-    htmlContent: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-top: 5px solid #244531; background: #d8d8d8;">
-                
-              <div style="background: url(https://res.cloudinary.com/dgigs6v72/image/upload/v1771837346/gd6kglmmwyn3n8bupxim.jpg) ; padding: 20px; width:100%; height:150px; text-align: center;">
-                 
-                </div>
-            <div style="background-color: #f9f9f9; padding: 20px; text-align: center;">
-                    <h1 style="color: #244531; margin: 0;">Vizit</h1>
-                </div>
-                <div style="padding: 30px; color: #333;">
-                    <h2>Your Currently Logged in from</h2>
-                    <p>You Logged Into Your Account succesfully at ${new Date.toLocaleString()}</p>
-                    <div style="background: #f0fdf4; border: 1px dashed #22c55e; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; color: #244531; letter-spacing: 5px;">
-                    
-                    </div>
-                    <p style="margin-top: 20px;">this email is to tell when you try accessing your account.</p>
-                </div>
-                <div style="background: #244531; color: white; padding: 15px; text-align: center; font-size: 12px;">
-                    © ${new Date.toLocaleString()} Vizit Support. All rights reserved.
-                </div>
-            </div>
-        `
-  };
-
-  await axios.post(url, emailContent, {
-    headers: { "api-key": apiKey, "Content-Type": "application/json" }
-  });
-};
-
-
 // Callback
 app.get(
   "/auth/google/callback",
@@ -255,7 +216,7 @@ app.get(
           console.error("No user returned from Google strategy");
           return res.redirect(`${FRONTEND}/login-failed`);
         }
-        sendBrevoEmail(user?.email); // send login notification email
+
         // Create JWT
         const token = jwt.sign(
           { id: user._id, email: user.email, role: user.role },
@@ -272,9 +233,7 @@ app.get(
 
         // Redirect with token
         const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(token)}&role=${user.role}`;
-
         return res.redirect(targetUrl);
-
 
       } catch (err) {
         console.error("Callback processing error:", err);
