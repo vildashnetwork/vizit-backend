@@ -1,16 +1,13 @@
+
+
+
+
+
+
 // import passport from "passport";
 // import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 // import UserModel from "../models/Users.js";
 // import HouseOwnerModel from "../models/HouseOwners.js";
-
-// /* ==============================
-//    GOOGLE STRATEGY
-// ============================== */
-
-
-
-
-
 
 // passport.use(
 //     new GoogleStrategy(
@@ -23,28 +20,25 @@
 //         async (req, accessToken, refreshToken, profile, done) => {
 //             try {
 //                 const email = profile.emails?.[0]?.value;
-//                 const role = req.query.state; // expected "owner" or "seeker"
-
-//                 console.log("Google callback profile:", profile);
-//                 console.log("Google callback role (state):", role);
+//                 // Google returns the 'state' parameter inside the query
+//                 const role = req.query.state;
 
 //                 if (!email) {
-//                     return done(new Error("Google account has no email"), null);
+//                     console.error("OAuth Error: No email found in Google profile");
+//                     return done(null, false, { message: "No email found" });
 //                 }
 
-//                 if (!["owner", "seeker"].includes(role)) {
-//                     return done(new Error("Invalid role selected"), null);
+//                 if (!role || !["owner", "seeker"].includes(role)) {
+//                     console.error("OAuth Error: Invalid or missing role in state:", role);
+//                     return done(null, false, { message: "Invalid role" });
 //                 }
 
-//                 let existingUser;
+//                 let user;
 
-//                 // -----------------------------
-//                 // OWNER LOGIN
-//                 a                // -----------------------------
 //                 if (role === "owner") {
-//                     existingUser = await HouseOwnerModel.findOne({ email });
-//                     if (!existingUser) {
-//                         existingUser = await HouseOwnerModel.create({
+//                     user = await HouseOwnerModel.findOne({ email });
+//                     if (!user) {
+//                         user = await HouseOwnerModel.create({
 //                             googleId: profile.id,
 //                             email,
 //                             name: profile.displayName,
@@ -52,15 +46,10 @@
 //                             role: "owner",
 //                         });
 //                     }
-//                 }
-
-//                 // -----------------------------
-//                 // SEEKER LOGIN
-//                 // -----------------------------
-//                 if (role === "seeker") {
-//                     existingUser = await UserModel.findOne({ email });
-//                     if (!existingUser) {
-//                         existingUser = await UserModel.create({
+//                 } else {
+//                     user = await UserModel.findOne({ email });
+//                     if (!user) {
+//                         user = await UserModel.create({
 //                             googleId: profile.id,
 //                             email,
 //                             name: profile.displayName,
@@ -70,55 +59,43 @@
 //                     }
 //                 }
 
-//                 // -----------------------------
-//                 // Ensure googleId is saved
-//                 // -----------------------------
-//                 if (!existingUser.googleId) {
-//                     existingUser.googleId = profile.id;
-//                     await existingUser.save();
+//                 // Ensure googleId is linked if they previously signed up with email/pass
+//                 if (!user.googleId) {
+//                     user.googleId = profile.id;
+//                     await user.save();
 //                 }
 
-//                 // return sanitized user info
-//                 return done(null, {
-//                     id: existingUser._id.toString(),
-//                     role: existingUser.role,
-//                     email: existingUser.email,
-//                 });
+//                 // IMPORTANT: Return a plain object or the doc for the custom callback
+//                 return done(null, user);
 //             } catch (err) {
-//                 console.error("GoogleStrategy Error:", err);
+//                 console.error("Strategy Error:", err);
 //                 return done(err, null);
 //             }
 //         }
 //     )
 // );
 
-// /* ==============================
-//    SERIALIZE USER
-// ============================== */
 // passport.serializeUser((user, done) => {
-//     done(null, { id: user.id, role: user.role });
+//     // Store both ID and Role so we know which collection to query on refresh
+//     done(null, { id: user._id || user.id, role: user.role });
 // });
 
-// /* ==============================
-//    DESERIALIZE USER
-// ============================== */
 // passport.deserializeUser(async (data, done) => {
 //     try {
-//         if (!data?.id || !data?.role) return done(new Error("Invalid session"), null);
-
 //         const Model = data.role === "owner" ? HouseOwnerModel : UserModel;
 //         const user = await Model.findById(data.id);
-
-//         if (!user) {
-//             return done(new Error("User not found"), null);
-//         }
-
 //         done(null, user);
 //     } catch (err) {
-//         console.error("DeserializeUser Error:", err);
 //         done(err, null);
 //     }
 // });
+
+
+
+
+
+
+
 
 
 
@@ -149,63 +126,63 @@ passport.use(
         async (req, accessToken, refreshToken, profile, done) => {
             try {
                 const email = profile.emails?.[0]?.value;
-                // Google returns the 'state' parameter inside the query
-                const role = req.query.state;
+                const role = req.query.state; // "owner" or "seeker"
 
-                if (!email) {
-                    console.error("OAuth Error: No email found in Google profile");
-                    return done(null, false, { message: "No email found" });
+                if (!email) return done(null, false, { message: "No email found" });
+                if (!role) return done(null, false, { message: "No role specified" });
+
+                // 1. Cross-Check: Look for the email in BOTH collections
+                const existingOwner = await HouseOwnerModel.findOne({ email });
+                const existingSeeker = await UserModel.findOne({ email });
+
+                // 2. Logic: If they exist in the OTHER role, block them
+                if (role === "owner" && existingSeeker) {
+                    console.error(`Conflict: ${email} is already registered as a Seeker.`);
+                    return done(null, false, { message: "Email already used as a Seeker" });
                 }
 
-                if (!role || !["owner", "seeker"].includes(role)) {
-                    console.error("OAuth Error: Invalid or missing role in state:", role);
-                    return done(null, false, { message: "Invalid role" });
+                if (role === "seeker" && existingOwner) {
+                    console.error(`Conflict: ${email} is already registered as an Owner.`);
+                    return done(null, false, { message: "Email already used as an Owner" });
                 }
 
+                // 3. Proceed with Login or Registration in the chosen role
                 let user;
-
                 if (role === "owner") {
-                    user = await HouseOwnerModel.findOne({ email });
-                    if (!user) {
-                        user = await HouseOwnerModel.create({
-                            googleId: profile.id,
-                            email,
-                            name: profile.displayName,
-                            profile: profile.photos?.[0]?.value,
-                            role: "owner",
-                        });
-                    }
+                    user = existingOwner || await HouseOwnerModel.create({
+                        googleId: profile.id,
+                        email,
+                        name: profile.displayName,
+                        profile: profile.photos?.[0]?.value,
+                        role: "owner",
+                    });
                 } else {
-                    user = await UserModel.findOne({ email });
-                    if (!user) {
-                        user = await UserModel.create({
-                            googleId: profile.id,
-                            email,
-                            name: profile.displayName,
-                            profile: profile.photos?.[0]?.value,
-                            role: "seeker",
-                        });
-                    }
+                    user = existingSeeker || await UserModel.create({
+                        googleId: profile.id,
+                        email,
+                        name: profile.displayName,
+                        profile: profile.photos?.[0]?.value,
+                        role: "seeker",
+                    });
                 }
 
-                // Ensure googleId is linked if they previously signed up with email/pass
+                // Sync googleId if missing
                 if (!user.googleId) {
                     user.googleId = profile.id;
                     await user.save();
                 }
 
-                // IMPORTANT: Return a plain object or the doc for the custom callback
                 return done(null, user);
             } catch (err) {
-                console.error("Strategy Error:", err);
+                console.error("Google Strategy Error:", err);
                 return done(err, null);
             }
         }
     )
 );
 
+// Keep Serializers as they were in the previous step...
 passport.serializeUser((user, done) => {
-    // Store both ID and Role so we know which collection to query on refresh
     done(null, { id: user._id || user.id, role: user.role });
 });
 
