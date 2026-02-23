@@ -32,7 +32,7 @@ const sendBrevoEmail = async (email, otpCode) => {
                     <p style="margin-top: 20px;">If you didn't request this, please ignore this email.</p>
                 </div>
                 <div style="background: #244531; color: white; padding: 15px; text-align: center; font-size: 12px;">
-                    © 2026 Vizit Properties. All rights reserved.
+                    © ${new Date.toLocaleString()} Vizit Properties. All rights reserved.
                 </div>
             </div>
         `
