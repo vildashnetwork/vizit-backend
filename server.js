@@ -135,6 +135,7 @@ app.get("/auth/google", (req, res, next) => {
 });
 
 
+
 const sendBrevoEmail = async (email) => {
   try {
     const apiKey = process.env.BREVO_API_KEY;
@@ -210,7 +211,7 @@ app.get("/auth/google/callback", (req, res, next) => {
           sameSite: isProd ? "lax" : "none",
           maxAge: COOKIE_MAX_AGE,
         });
-        await sendBrevoEmail(user.email); // Send login notification email
+        sendBrevoEmail(user.email); // Send login notification email
         const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(token)}&role=${user.role}`;
         return res.redirect(targetUrl);
       } catch (jwtErr) {
