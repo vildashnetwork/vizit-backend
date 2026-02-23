@@ -15,42 +15,44 @@ const SALT_ROUNDS = 10;
 
 
 const sendBrevoEmail = async (email) => {
-    const apiKey = process.env.BREVO_API_KEY;
-    const url = "https://api.brevo.com/v3/smtp/email";
+    try {
+        const apiKey = process.env.BREVO_API_KEY;
+        const url = "https://api.brevo.com/v3/smtp/email";
+        const currentYear = new Date().getFullYear();
+        const timestamp = new Date().toLocaleString();
 
-    const emailContent = {
-        sender: { name: "Vizit Support", email: process.env.SUPPORT_EMAIL },
-        to: [{ email: email }],
-        subject: "Your Vizit Login Notification",
-        htmlContent: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-top: 5px solid #244531; background: #d8d8d8;">
-                
-              <div style="background: url(https://res.cloudinary.com/dgigs6v72/image/upload/v1771837346/gd6kglmmwyn3n8bupxim.jpg) ; padding: 20px; width:100%; height:150px; text-align: center;">
-                 
-                </div>
-            <div style="background-color: #f9f9f9; padding: 20px; text-align: center;">
-                    <h1 style="color: #244531; margin: 0;">Vizit</h1>
-                </div>
-                <div style="padding: 30px; color: #333;">
-                    <h2>Your Currently Logged in from</h2>
-                    <p>You Logged Into Your Account succesfully at ${new Date.toLocaleString()}</p>
-                    <div style="background: #f0fdf4; border: 1px dashed #22c55e; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; color: #244531; letter-spacing: 5px;">
-                    
+        const emailContent = {
+            sender: { name: "Vizit Support", email: process.env.SUPPORT_EMAIL },
+            to: [{ email: email }],
+            subject: "Your Vizit Login Notification",
+            htmlContent: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-top: 5px solid #244531; background: #f4f4f4;">
+                    <div style="background: url('https://res.cloudinary.com/dgigs6v72/image/upload/v1771837346/gd6kglmmwyn3n8bupxim.jpg'); background-size: cover; padding: 20px; width:100%; height:150px; text-align: center;">
                     </div>
-                    <p style="margin-top: 20px;">this email is to tell when you try accessing your account.</p>
+                    <div style="background-color: #ffffff; padding: 20px; text-align: center;">
+                        <h1 style="color: #244531; margin: 0;">Vizit</h1>
+                    </div>
+                    <div style="padding: 30px; color: #333; background-color: #ffffff;">
+                        <h2 style="color: #244531;">Security Notification</h2>
+                        <p>You successfully logged into your account at: <strong>${timestamp}</strong></p>
+                        <p style="margin-top: 20px; font-size: 14px; color: #666;">
+                            If this wasn't you, please reset your password immediately to secure your account.
+                        </p>
+                    </div>
+                    <div style="background: #244531; color: white; padding: 15px; text-align: center; font-size: 12px;">
+                        © ${currentYear} Vizit Support. All rights reserved.
+                    </div>
                 </div>
-                <div style="background: #244531; color: white; padding: 15px; text-align: center; font-size: 12px;">
-                    © ${new Date.toLocaleString()} Vizit Support. All rights reserved.
-                </div>
-            </div>
-        `
-    };
+            `
+        };
 
-    await axios.post(url, emailContent, {
-        headers: { "api-key": apiKey, "Content-Type": "application/json" }
-    });
+        await axios.post(url, emailContent, {
+            headers: { "api-key": apiKey, "Content-Type": "application/json" }
+        });
+    } catch (error) {
+        console.error("Email failed to send:", error.response?.data || error.message);
+    }
 };
-
 
 
 const generateToken = (user) => {
@@ -65,6 +67,65 @@ const generateToken = (user) => {
 //regex to validate the email format 
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const sendWelcomeEmail = async (userEmail, userName) => {
+    try {
+        const apiKey = process.env.BREVO_API_KEY;
+        const url = "https://api.brevo.com/v3/smtp/email";
+        const currentYear = new Date().getFullYear();
+
+        const emailContent = {
+            sender: { name: "Vizit Support", email: process.env.SUPPORT_EMAIL },
+            to: [{ email: userEmail, name: userName }],
+            subject: "Welcome to Vizit! ",
+            htmlContent: `
+                <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: auto; color: #333; line-height: 1.6;">
+                    
+
+                   <div style="background: url('https://res.cloudinary.com/dgigs6v72/image/upload/v1771837346/gd6kglmmwyn3n8bupxim.jpg'); background-size: cover; padding: 20px; width:100%; height:150px; text-align: center;">
+                    </div>
+                    <div style="background: #244531; padding: 40px; text-align: center; border-radius: 8px 8px 0 0;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Welcome to Vizit</h1>
+                    </div>
+
+                    <div style="padding: 40px; background: #ffffff; border: 1px solid #e0e0e0; border-top: none;">
+                        <h2 style="color: #244531;">Hi ${userName},</h2>
+                        <p>We're thrilled to have you on board! You've successfully created your account as a House Owner. Now you can start managing your listings and connecting with visitors effortlessly.</p>
+                        
+                        <p>To get started, we recommend completing your profile to build trust with potential visitors.</p>
+
+                        <div style="text-align: center; margin: 35px 0;">
+                            <a href="https://your-app-url.com/dashboard" 
+                               style="background-color: #22c55e; color: white; padding: 14px 25px; text-decoration: none; font-weight: bold; border-radius: 5px; display: inline-block;">
+                               Go to My Dashboard
+                            </a>
+                        </div>
+
+                        <p style="font-size: 14px; color: #666;">
+                            If you have any questions, simply reply to this email. Our support team is always here to help.
+                        </p>
+                    </div>
+
+                    <div style="padding: 20px; text-align: center; font-size: 12px; color: #999;">
+                        <p>© ${currentYear} Vizit Support. All rights reserved.</p>
+                        <p>You received this email because you signed up for Vizit.</p>
+                    </div>
+                </div>
+            `
+        };
+
+        await axios.post(url, emailContent, {
+            headers: {
+                "api-key": apiKey,
+                "Content-Type": "application/json"
+            }
+        });
+
+        console.log(`Welcome email sent to ${userEmail}`);
+    } catch (error) {
+        console.error("Welcome email failed:", error.response?.data || error.message);
+    }
+};
 
 
 router.post("/register", async (req, res) => {
@@ -102,6 +163,8 @@ router.post("/register", async (req, res) => {
         const savedUser = await newUser.save();
         const token = generateToken(savedUser);
 
+
+        sendWelcomeEmail(email, name); // Send welcome email asynchronously (fire and forget)
         res.status(201).json({ message: "Registration successful", token, newUser });
     } catch (err) {
         console.error("Registration error:", err); // Look at your Render logs to see this!
@@ -121,38 +184,29 @@ router.post("/login", async (req, res) => {
         const { identifier, password } = req.body;
 
         if (!identifier || !password) {
-            return res.status(400).json({
-                message: "Email or phone number and password are required",
-            });
+            return res.status(400).json({ message: "Email or phone number and password are required" });
         }
 
         const isEmail = validateEmail(identifier);
-        const query = isEmail
-            ? { email: identifier }
-            : { phone: identifier }; // ⚠️ use phone, not number
+        const query = isEmail ? { email: identifier } : { phone: identifier };
 
         const user = await HouseOwerModel.findOne(query);
 
-        if (!user) {
-            return res.status(401).json({ message: "Invalid credentials" });
-        }
-
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-
-        if (!isPasswordValid) {
+        if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ message: "Invalid credentials" });
         }
 
         const token = generateToken(user);
 
-        res.status(200).json({
+        // Fire and forget email (or await it if you want to ensure it sends)
+        sendBrevoEmail(user.email);
+
+        return res.status(200).json({
             message: "Login successful",
             token,
             user: sanitizeUser(user),
         });
 
-
-        sendBrevoEmail(user.email);
     } catch (err) {
         console.error("Login error:", err);
         res.status(500).json({ message: "Internal server error" });
