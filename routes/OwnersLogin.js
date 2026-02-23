@@ -2,6 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
+import axios from "axios";
 import decodeTokenFromReq from "./decode.js";
 import HouseOwerModel from "../models/HouseOwners.js";
 import UserModel from "../models/Users.js";
