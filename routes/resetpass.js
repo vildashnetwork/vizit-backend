@@ -11,6 +11,14 @@ const router = express.Router()
 const SALT_ROUNDS = 10;
 
 const sendBrevoEmail = async (email, otpCode) => {
+    const options = { 
+  weekday: 'long', 
+  year: 'numeric', 
+  month: 'long', 
+  day: 'numeric' 
+};
+
+// Output: "Sunday, March 1, 2026"
     const apiKey = process.env.BREVO_API_KEY;
     const url = "https://api.brevo.com/v3/smtp/email";
 
@@ -32,7 +40,7 @@ const sendBrevoEmail = async (email, otpCode) => {
                     <p style="margin-top: 20px;">If you didn't request this, please ignore this email.</p>
                 </div>
                 <div style="background: #244531; color: white; padding: 15px; text-align: center; font-size: 12px;">
-                    © ${new Date.toLocaleString()} Vizit Properties. All rights reserved.
+                    © ${new Date().toLocaleString('en-US', options)} Vizit Properties. All rights reserved.
                 </div>
             </div>
         `
