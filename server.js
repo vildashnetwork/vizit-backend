@@ -198,6 +198,52 @@ app.get("/auth/google", (req, res, next) => {
   })(req, res, next);
 });
 
+app.post("/api/auth/google-mobile", async (req, res) => {
+  try {
+    const { token, role } = req.body;
+
+    if (!token || !role) {
+      return res.status(400).json({ message: "Token and role are required" });
+    }
+
+    // 1. Verify the token with Google
+    const googleResponse = await axios.get(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`);
+    const { email, sub: googleId } = googleResponse.data;
+
+    // 2. Find the user based on the role provided by the app
+    // Using your existing model logic
+    let user;
+    if (role === "owner") {
+      user = await mongoose.connection.db.collection("houseowners").findOne({ email });
+    } else {
+      user = await mongoose.connection.db.collection("users").findOne({ email });
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: "Account not found. Please register on the web first." });
+    }
+
+    // 3. Issue Vizit JWT
+    const vizitToken = jwt.sign(
+      { id: user._id, email: user.email, role: role },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    // 4. Send security email (Optional but recommended for consistency)
+    sendBrevoEmail(user.email);
+
+    res.json({ 
+      token: vizitToken,
+      role: role,
+      user: { email: user.email, name: user.name } 
+    });
+
+  } catch (error) {
+    console.error("Mobile Auth Error:", error.response?.data || error.message);
+    res.status(500).json({ message: "Authentication failed" });
+  }
+});
 // 2. Updated Callback Route
 app.get("/auth/google/callback", (req, res, next) => {
   passport.authenticate("google", (err, user, info) => {
