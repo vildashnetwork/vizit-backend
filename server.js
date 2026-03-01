@@ -175,52 +175,134 @@ const sendBrevoEmail = async (email) => {
     console.error("Email failed to send:", error.response?.data || error.message);
   }
 };
+
+
+
+
+// 1. Updated Initial Request Route
+app.get("/auth/google", (req, res, next) => {
+  const role = req.query.role;
+  // Capture mobile redirect if present, otherwise null
+  const mobileRedirect = req.query.mobile_redirect || null;
+
+  if (!role || !["owner", "seeker"].includes(role)) {
+    return res.status(400).json({ message: "Invalid role parameter" });
+  }
+
+  // We pack both role and mobileRedirect into the state
+  const stateData = JSON.stringify({ role, mobileRedirect });
+
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    state: stateData, // Google will send this back to our callback
+  })(req, res, next);
+});
+
+// 2. Updated Callback Route
 app.get("/auth/google/callback", (req, res, next) => {
   passport.authenticate("google", (err, user, info) => {
-    if (err) {
-      console.error("Passport Auth Error:", err);
-      return res.redirect(`${FRONTEND}/login-failed`);
-    }
-    if (!user) {
-      console.error("Auth Failed: No user found", info);
+    if (err || !user) {
       return res.redirect(`${FRONTEND}/login-failed`);
     }
 
-    // Passport's req.login is required when using a custom callback with sessions
     req.login(user, (loginErr) => {
-      if (loginErr) {
-        console.error("Login Error:", loginErr);
-        return res.redirect(`${FRONTEND}/login-failed`);
-      }
+      if (loginErr) return res.redirect(`${FRONTEND}/login-failed`);
 
       try {
-        // Create JWT - ensure you use user.id or user._id consistently
+        // --- DATA EXTRACTION ---
+        let mobileRedirect = null;
+        if (req.query.state) {
+          try {
+            const parsedState = JSON.parse(req.query.state);
+            mobileRedirect = parsedState.mobileRedirect;
+          } catch (e) {
+            console.error("State parsing failed");
+          }
+        }
+
         const token = jwt.sign(
-          {
-            id: user.id || user._id,
-            email: user.email,
-            role: user.role
-          },
+          { id: user.id || user._id, email: user.email, role: user.role },
           JWT_SECRET,
           { expiresIn: "7d" }
         );
 
+        // --- WEB COOKIE (Keep this for Web users) ---
         res.cookie(COOKIE_NAME, token, {
           httpOnly: true,
           secure: isProd,
           sameSite: isProd ? "lax" : "none",
           maxAge: COOKIE_MAX_AGE,
         });
-        sendBrevoEmail(user.email); // Send login notification email
-        const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(token)}&role=${user.role}`;
-        return res.redirect(targetUrl);
+
+        sendBrevoEmail(user.email);
+
+        // --- THE "SWITCH" LOGIC ---
+        if (mobileRedirect) {
+          // MOBILE FLOW: Redirect to the app scheme
+          // e.g., vizitmobile://auth-callback?token=...
+          const appUrl = `${mobileRedirect}?token=${encodeURIComponent(token)}&role=${user.role}`;
+          return res.redirect(appUrl);
+        } else {
+          // WEB FLOW: Redirect to your standard web dashboard
+          const webUrl = `${FRONTEND}/auth?token=${encodeURIComponent(token)}&role=${user.role}`;
+          return res.redirect(webUrl);
+        }
+
       } catch (jwtErr) {
-        console.error("JWT Signing Error:", jwtErr);
         return res.redirect(`${FRONTEND}/login-failed`);
       }
     });
   })(req, res, next);
 });
+
+
+
+// app.get("/auth/google/callback", (req, res, next) => {
+//   passport.authenticate("google", (err, user, info) => {
+//     if (err) {
+//       console.error("Passport Auth Error:", err);
+//       return res.redirect(`${FRONTEND}/login-failed`);
+//     }
+//     if (!user) {
+//       console.error("Auth Failed: No user found", info);
+//       return res.redirect(`${FRONTEND}/login-failed`);
+//     }
+
+//     // Passport's req.login is required when using a custom callback with sessions
+//     req.login(user, (loginErr) => {
+//       if (loginErr) {
+//         console.error("Login Error:", loginErr);
+//         return res.redirect(`${FRONTEND}/login-failed`);
+//       }
+
+//       try {
+//         // Create JWT - ensure you use user.id or user._id consistently
+//         const token = jwt.sign(
+//           {
+//             id: user.id || user._id,
+//             email: user.email,
+//             role: user.role
+//           },
+//           JWT_SECRET,
+//           { expiresIn: "7d" }
+//         );
+
+//         res.cookie(COOKIE_NAME, token, {
+//           httpOnly: true,
+//           secure: isProd,
+//           sameSite: isProd ? "lax" : "none",
+//           maxAge: COOKIE_MAX_AGE,
+//         });
+//         sendBrevoEmail(user.email); // Send login notification email
+//         const targetUrl = `${FRONTEND}/auth?token=${encodeURIComponent(token)}&role=${user.role}`;
+//         return res.redirect(targetUrl);
+//       } catch (jwtErr) {
+//         console.error("JWT Signing Error:", jwtErr);
+//         return res.redirect(`${FRONTEND}/login-failed`);
+//       }
+//     });
+//   })(req, res, next);
+// });
 
 app.get("/auth/logout", (req, res, next) => {
   res.clearCookie(COOKIE_NAME, {
