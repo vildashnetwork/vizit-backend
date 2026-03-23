@@ -1,6 +1,6 @@
 // routes/liveRoutes.js
 import express from "express";
-import LiveSession from "../models/LiveSession.js";
+import LiveSession from "../models/LiveSessions.js";
 import LiveNotification from "../models/LiveNotification.js";
 import UserModel from "../models/Users.js";
 import HouseOwnerModel from "../models/HouseOwners.js";
