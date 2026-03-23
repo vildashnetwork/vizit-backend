@@ -365,16 +365,29 @@ export const getActiveLiveSession = async (req, res) => {
 // Get all live sessions (active, scheduled, and past)
 export const getAllLiveSessions = async (req, res) => {
     try {
-        const liveSessions = await LiveSession.find({})
-            .populate('createdbyId', 'name profile companyname')
-            .sort({ scheduledAt: 1, createdAt: -1 });
+        console.log("📡 Fetching all live sessions...");
+
+        // Remove populate temporarily to test
+        const allSessions = await LiveSession.find({})
+            .sort({ createdAt: -1 })
+            .lean();
+
+        console.log(`✅ Found ${allSessions.length} sessions`);
+
+        const formattedSessions = allSessions.map(session => ({
+            ...session,
+            roomUrl: session.isLive ? `https://sfu.mirotalk.com/join/?room=${session.streamKey}` : null,
+            isLive: session.isLive || false,
+            isScheduled: session.isScheduled || false,
+            createdbyId: session.createdbyId // This will just be the ID, not populated
+        }));
 
         res.status(200).json({
             success: true,
-            liveSessions
+            liveSessions: formattedSessions
         });
     } catch (error) {
-        console.error("Get all live sessions error:", error);
+        console.error("❌ Get all live sessions error:", error);
         res.status(500).json({
             success: false,
             message: error.message
