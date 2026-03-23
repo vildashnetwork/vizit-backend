@@ -32,6 +32,7 @@ import kyc from "./routes/kyc.js";
 import superRoute from "./routes/super.js";
 import seperRoute from "./routes/supperreset.js";
 import referal from "./routes/referal.js";
+import liveroute from "./routes/liveRoutes.js";
 
 import "./auth/passport.js";
 
@@ -99,7 +100,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // -------------------- ROUTES --------------------
-
+app.use("/api/live", liveroute);
 app.use("/api/owner", ownerroute);
 app.use("/api/user", userroute);
 app.use("/api/house", house);
@@ -233,10 +234,10 @@ app.post("/api/auth/google-mobile", async (req, res) => {
     // 4. Send security email (Optional but recommended for consistency)
     sendBrevoEmail(user.email);
 
-    res.json({ 
+    res.json({
       token: vizitToken,
       role: role,
-      user: { email: user.email, name: user.name } 
+      user: { email: user.email, name: user.name }
     });
 
   } catch (error) {
