@@ -100,7 +100,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // -------------------- ROUTES --------------------
-app.use("/api/live", liveroute);
+app.use("/api", liveroute);
 app.use("/api/owner", ownerroute);
 app.use("/api/user", userroute);
 app.use("/api/house", house);
