@@ -1,7 +1,6 @@
 // routes/liveRoutes.js
 import express from "express";
-import mongoose from "mongoose";
-import LiveSession from "../models/LiveSessions.js";
+import LiveSession from "../models/LiveSession.js";
 import LiveNotification from "../models/LiveNotification.js";
 import UserModel from "../models/Users.js";
 import HouseOwnerModel from "../models/HouseOwners.js";
@@ -15,48 +14,69 @@ const generateStreamKey = () => {
     return crypto.randomBytes(16).toString('hex');
 };
 
-// Send email notification to all house seekers
-const sendLiveNotificationEmail = async (email, liveSession, owner) => {
+// Send email notification
+const sendLiveNotificationEmail = async (email, liveSession, owner, type = 'started') => {
     const apiKey = process.env.BREVO_API_KEY;
     const url = "https://api.brevo.com/v3/smtp/email";
-
-    const options = {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    };
-
     const roomUrl = `https://sfu.mirotalk.com/join/?room=${liveSession.streamKey}`;
-    const appUrl = process.env.APP_URL || "https://auth.vizit.homes";
+
+    let subject = "";
+    let content = "";
+
+    if (type === 'scheduled') {
+        subject = `📅 Live Session Scheduled: ${liveSession.title}`;
+        content = `
+            <h2>Live Session Scheduled</h2>
+            <p><strong>${liveSession.title}</strong> has been scheduled for <strong>${new Date(liveSession.scheduledAt).toLocaleString()}</strong></p>
+            <p>${liveSession.description || "Join this live session to see exclusive property tours!"}</p>
+            <p>You'll receive a reminder 5 minutes before it starts.</p>
+            <div style="background: #f0f0f0; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <p>Room link: <a href="${roomUrl}">${roomUrl}</a></p>
+            </div>
+        `;
+    } else if (type === 'reminder') {
+        subject = `🔔 Starting Soon: ${liveSession.title}`;
+        content = `
+            <h2>Live Session Starting Soon!</h2>
+            <p><strong>${liveSession.title}</strong> starts in 5 minutes!</p>
+            <p>${liveSession.description || "Don't miss out!"}</p>
+            <div style="background: #ff4444; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+                <a href="${roomUrl}" style="color: white; text-decoration: none; font-weight: bold;">
+                    Join Now
+                </a>
+            </div>
+        `;
+    } else {
+        subject = `🔴 LIVE NOW: ${liveSession.title}`;
+        content = `
+            <h2 style="color: #ef4444;">🔴 LIVE NOW</h2>
+            <p><strong>${liveSession.title}</strong> is now live!</p>
+            <p>${liveSession.description || "Join now to see exclusive property tours!"}</p>
+            <div style="background: #ef4444; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+                <a href="${roomUrl}" style="color: white; text-decoration: none; font-weight: bold;">
+                    Join Live Session
+                </a>
+            </div>
+        `;
+    }
 
     const emailContent = {
         sender: { name: "Vizit Live", email: process.env.SUPPORT_EMAIL || "support@vizit.homes" },
         to: [{ email: email }],
-        subject: `🔴 LIVE NOW: ${liveSession.title}`,
+        subject: subject,
         htmlContent: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-top: 5px solid #ff4444;">
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-top: 5px solid #10ca8c;">
                 <div style="background-color: #f9f9f9; padding: 20px; text-align: center;">
-                    <h1 style="color: #ff4444; margin: 0;">🔴 LIVE NOW</h1>
+                    <h1 style="color: #10ca8c; margin: 0;">Vizit Live</h1>
                 </div>
                 <div style="padding: 30px; color: #333;">
-                    <h2>${liveSession.title}</h2>
-                    <p><strong>Host:</strong> ${owner?.name || "Property Owner"}</p>
-                    <p>${liveSession.description || "A new live session has started! Join now to see exclusive property tours and Q&A sessions."}</p>
-                    <div style="background: #ff4444; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
-                        <a href="${roomUrl}" 
-                           style="color: white; text-decoration: none; font-weight: bold; font-size: 16px;">
-                           Click here to join the live stream
-                        </a>
-                    </div>
-                    <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; margin: 15px 0;">
-                        <p style="margin: 0; font-size: 12px; color: #666;">💡 Tip: You can also copy this link to share with friends:</p>
-                        <p style="margin: 5px 0 0 0; font-size: 11px; color: #999; word-break: break-all;">${roomUrl}</p>
-                    </div>
-                    <p style="margin-top: 20px;">Don't miss out on this exciting live session!</p>
+                    ${content}
+                    <p style="margin-top: 20px; font-size: 12px; color: #999;">
+                        You're receiving this because you're a Vizit user.
+                    </p>
                 </div>
                 <div style="background: #244531; color: white; padding: 15px; text-align: center; font-size: 12px;">
-                    © ${new Date().toLocaleString('en-US', options)} Vizit Properties. All rights reserved.
+                    © ${new Date().getFullYear()} Vizit Properties. All rights reserved.
                 </div>
             </div>
         `
@@ -77,10 +97,7 @@ const sendLiveNotificationEmail = async (email, liveSession, owner) => {
 const getAllHouseSeekersEmails = async () => {
     try {
         const users = await UserModel.find({}, { email: 1, name: 1 });
-        return users.map(user => ({
-            email: user.email,
-            name: user.name
-        }));
+        return users.map(user => user.email);
     } catch (error) {
         console.error("Error fetching house seekers:", error);
         return [];
@@ -98,10 +115,10 @@ const getOwnerDetails = async (ownerId) => {
     }
 };
 
-// Create a new live session
+// Create a new live session (can be immediate or scheduled)
 export const createLiveSession = async (req, res) => {
     try {
-        const { createdbyId, title, description } = req.body;
+        const { createdbyId, title, description, scheduledAt } = req.body;
 
         if (!createdbyId) {
             return res.status(400).json({
@@ -110,7 +127,6 @@ export const createLiveSession = async (req, res) => {
             });
         }
 
-        // Check if owner already has an active live session
         const existingLive = await LiveSession.findOne({
             createdbyId,
             isLive: true
@@ -123,9 +139,11 @@ export const createLiveSession = async (req, res) => {
             });
         }
 
-        // Generate stream key and room URL
         const streamKey = generateStreamKey();
         const roomUrl = `https://sfu.mirotalk.com/join/?room=${streamKey}`;
+
+        const isScheduled = !!scheduledAt;
+        const sessionDate = isScheduled ? new Date(scheduledAt) : null;
 
         const liveSession = new LiveSession({
             createdbyId,
@@ -133,21 +151,55 @@ export const createLiveSession = async (req, res) => {
             description: description || "",
             streamKey,
             roomUrl,
-            isLive: false
+            isLive: false,
+            isScheduled,
+            scheduledAt: sessionDate,
+            reminderSent: false,
+            scheduledNotificationSent: false
         });
 
         await liveSession.save();
 
+        // Send notification emails for scheduled sessions
+        if (isScheduled && sessionDate > new Date()) {
+            const houseSeekers = await getAllHouseSeekersEmails();
+            const owner = await getOwnerDetails(createdbyId);
+
+            // Send to all house seekers
+            const seekerPromises = houseSeekers.map(email =>
+                sendLiveNotificationEmail(email, liveSession, owner, 'scheduled')
+            );
+
+            // Send to owner as well
+            if (owner?.email) {
+                seekerPromises.push(sendLiveNotificationEmail(owner.email, liveSession, owner, 'scheduled'));
+            }
+
+            Promise.all(seekerPromises).catch(err =>
+                console.error("Error sending scheduled notifications:", err)
+            );
+
+            // Create notification record
+            const notification = new LiveNotification({
+                liveSessionId: liveSession._id,
+                recipientIds: houseSeekers,
+                type: 'scheduled'
+            });
+            await notification.save();
+        }
+
         res.status(201).json({
             success: true,
-            message: "Live session created successfully",
+            message: isScheduled ? "Live session scheduled successfully!" : "Live session created successfully!",
             liveSession: {
                 _id: liveSession._id,
                 title: liveSession.title,
                 description: liveSession.description,
                 streamKey: liveSession.streamKey,
                 roomUrl: liveSession.roomUrl,
-                isLive: liveSession.isLive
+                isLive: liveSession.isLive,
+                isScheduled: liveSession.isScheduled,
+                scheduledAt: liveSession.scheduledAt
             }
         });
     } catch (error) {
@@ -159,17 +211,10 @@ export const createLiveSession = async (req, res) => {
     }
 };
 
-// Start a live session (toggle isLive to true)
-export const startLiveSession = async (req, res) => {
+// Toggle live session (start/end)
+export const toggleLiveSession = async (req, res) => {
     try {
         const { sessionId, streamKey } = req.body;
-
-        if (!sessionId || !streamKey) {
-            return res.status(400).json({
-                success: false,
-                message: "Session ID and stream key are required"
-            });
-        }
 
         const liveSession = await LiveSession.findOne({ _id: sessionId, streamKey });
 
@@ -181,105 +226,61 @@ export const startLiveSession = async (req, res) => {
         }
 
         if (liveSession.isLive) {
-            return res.status(400).json({
-                success: false,
-                message: "Live session is already active"
+            // End the session
+            liveSession.isLive = false;
+            liveSession.endedAt = new Date();
+            await liveSession.save();
+
+            res.status(200).json({
+                success: true,
+                message: "Live session ended",
+                isLive: false,
+                liveSession
             });
-        }
+        } else {
+            // Start the session
+            const owner = await getOwnerDetails(liveSession.createdbyId);
 
-        // Get owner details for email
-        const owner = await getOwnerDetails(liveSession.createdbyId);
+            liveSession.isLive = true;
+            liveSession.isScheduled = false;
+            liveSession.startedAt = new Date();
+            liveSession.endedAt = null;
+            await liveSession.save();
 
-        // Update to live
-        liveSession.isLive = true;
-        liveSession.startedAt = new Date();
-        liveSession.endedAt = null;
-        await liveSession.save();
+            // Get all house seekers
+            const houseSeekers = await getAllHouseSeekersEmails();
 
-        // Get all house seekers emails
-        const houseSeekers = await getAllHouseSeekersEmails();
+            // Send notifications
+            const notificationPromises = houseSeekers.map(email =>
+                sendLiveNotificationEmail(email, liveSession, owner, 'started')
+            );
 
-        // Send email notifications to all house seekers
-        const notificationPromises = houseSeekers.map(seeker =>
-            sendLiveNotificationEmail(seeker.email, liveSession, owner)
-        );
-
-        // Create notification record
-        const notification = new LiveNotification({
-            liveSessionId: liveSession._id,
-            recipientIds: houseSeekers.map(s => s.email),
-            type: 'started'
-        });
-        await notification.save();
-
-        // Send notifications in background (don't wait for all to complete)
-        Promise.all(notificationPromises).then(results => {
-            const successCount = results.filter(r => r === true).length;
-            console.log(`✅ Sent ${successCount} notifications out of ${houseSeekers.length}`);
-        }).catch(err =>
-            console.error("Error sending notifications:", err)
-        );
-
-        res.status(200).json({
-            success: true,
-            message: `Live session started. Notifications sent to ${houseSeekers.length} house seekers.`,
-            liveSession: {
-                _id: liveSession._id,
-                title: liveSession.title,
-                roomUrl: liveSession.roomUrl,
-                streamKey: liveSession.streamKey,
-                isLive: liveSession.isLive,
-                startedAt: liveSession.startedAt
+            // Send to owner as well
+            if (owner?.email) {
+                notificationPromises.push(sendLiveNotificationEmail(owner.email, liveSession, owner, 'started'));
             }
-        });
-    } catch (error) {
-        console.error("Start live session error:", error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
-};
 
-// End a live session (toggle isLive to false)
-export const endLiveSession = async (req, res) => {
-    try {
-        const { sessionId, streamKey } = req.body;
+            const notification = new LiveNotification({
+                liveSessionId: liveSession._id,
+                recipientIds: houseSeekers,
+                type: 'started'
+            });
+            await notification.save();
 
-        const liveSession = await LiveSession.findOne({ _id: sessionId, streamKey });
+            Promise.all(notificationPromises).catch(err =>
+                console.error("Error sending notifications:", err)
+            );
 
-        if (!liveSession) {
-            return res.status(404).json({
-                success: false,
-                message: "Live session not found or invalid stream key"
+            res.status(200).json({
+                success: true,
+                message: `Live session started! Notifications sent to ${houseSeekers.length} users.`,
+                isLive: true,
+                roomUrl: liveSession.roomUrl,
+                liveSession
             });
         }
-
-        if (!liveSession.isLive) {
-            return res.status(400).json({
-                success: false,
-                message: "Live session is not active"
-            });
-        }
-
-        liveSession.isLive = false;
-        liveSession.endedAt = new Date();
-        await liveSession.save();
-
-        // Create notification record
-        const notification = new LiveNotification({
-            liveSessionId: liveSession._id,
-            type: 'ended'
-        });
-        await notification.save();
-
-        res.status(200).json({
-            success: true,
-            message: "Live session ended",
-            liveSession
-        });
     } catch (error) {
-        console.error("End live session error:", error);
+        console.error("Toggle live session error:", error);
         res.status(500).json({
             success: false,
             message: error.message
@@ -302,8 +303,6 @@ export const deleteLiveSession = async (req, res) => {
         }
 
         await LiveSession.findByIdAndDelete(sessionId);
-
-        // Also delete associated notifications
         await LiveNotification.deleteMany({ liveSessionId: sessionId });
 
         res.status(200).json({
@@ -363,14 +362,33 @@ export const getActiveLiveSession = async (req, res) => {
     }
 };
 
-// Get all active live sessions (for house seekers)
+// Get all live sessions (active, scheduled, and past)
+export const getAllLiveSessions = async (req, res) => {
+    try {
+        const liveSessions = await LiveSession.find({})
+            .populate('createdbyId', 'name profile companyname')
+            .sort({ scheduledAt: 1, createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            liveSessions
+        });
+    } catch (error) {
+        console.error("Get all live sessions error:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Get active live sessions (for house seekers)
 export const getActiveLiveSessions = async (req, res) => {
     try {
         const activeSessions = await LiveSession.find({ isLive: true })
             .populate('createdbyId', 'name profile companyname')
             .sort({ startedAt: -1 });
 
-        // Add room URL to each session
         const sessionsWithUrl = activeSessions.map(session => ({
             ...session.toObject(),
             roomUrl: `https://sfu.mirotalk.com/join/?room=${session.streamKey}`
@@ -389,33 +407,23 @@ export const getActiveLiveSessions = async (req, res) => {
     }
 };
 
-// Get a single live session
-export const getLiveSession = async (req, res) => {
+// Get scheduled live sessions
+export const getScheduledLiveSessions = async (req, res) => {
     try {
-        const { sessionId } = req.params;
-
-        const liveSession = await LiveSession.findById(sessionId)
-            .populate('createdbyId', 'name email profile companyname');
-
-        if (!liveSession) {
-            return res.status(404).json({
-                success: false,
-                message: "Live session not found"
-            });
-        }
-
-        // Add room URL
-        const sessionData = {
-            ...liveSession.toObject(),
-            roomUrl: `https://sfu.mirotalk.com/join/?room=${liveSession.streamKey}`
-        };
+        const scheduledSessions = await LiveSession.find({
+            isScheduled: true,
+            isLive: false,
+            scheduledAt: { $gt: new Date() }
+        })
+            .populate('createdbyId', 'name profile companyname')
+            .sort({ scheduledAt: 1 });
 
         res.status(200).json({
             success: true,
-            liveSession: sessionData
+            scheduledSessions
         });
     } catch (error) {
-        console.error("Get live session error:", error);
+        console.error("Get scheduled live sessions error:", error);
         res.status(500).json({
             success: false,
             message: error.message
@@ -423,7 +431,7 @@ export const getLiveSession = async (req, res) => {
     }
 };
 
-// Join a live session (add user to viewers)
+// Join a live session
 export const joinLiveSession = async (req, res) => {
     try {
         const { sessionId, userId } = req.body;
@@ -437,14 +445,13 @@ export const joinLiveSession = async (req, res) => {
             });
         }
 
-        if (!liveSession.isLive) {
+        if (!liveSession.isLive && !liveSession.isScheduled) {
             return res.status(400).json({
                 success: false,
                 message: "Live session is not active"
             });
         }
 
-        // Add user to viewers if not already present
         if (!liveSession.viewers.includes(userId)) {
             liveSession.viewers.push(userId);
             await liveSession.save();
@@ -452,9 +459,10 @@ export const joinLiveSession = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: "Joined live session",
+            message: liveSession.isLive ? "Joined live session" : "Session scheduled",
             viewerCount: liveSession.viewers.length,
-            roomUrl: `https://sfu.mirotalk.com/join/?room=${liveSession.streamKey}`
+            roomUrl: liveSession.isLive ? `https://sfu.mirotalk.com/join/?room=${liveSession.streamKey}` : null,
+            scheduledAt: liveSession.scheduledAt
         });
     } catch (error) {
         console.error("Join live session error:", error);
@@ -465,156 +473,61 @@ export const joinLiveSession = async (req, res) => {
     }
 };
 
-// Leave a live session (remove user from viewers)
-export const leaveLiveSession = async (req, res) => {
-    try {
-        const { sessionId, userId } = req.body;
+// Reminder cron job function
+export const startReminderCron = () => {
+    setInterval(async () => {
+        try {
+            const now = new Date();
+            const reminderThreshold = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes from now
 
-        const liveSession = await LiveSession.findById(sessionId);
-
-        if (!liveSession) {
-            return res.status(404).json({
-                success: false,
-                message: "Live session not found"
-            });
-        }
-
-        liveSession.viewers = liveSession.viewers.filter(id => id.toString() !== userId);
-        await liveSession.save();
-
-        res.status(200).json({
-            success: true,
-            message: "Left live session",
-            viewerCount: liveSession.viewers.length
-        });
-    } catch (error) {
-        console.error("Leave live session error:", error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
-};
-
-// Get viewer count for a live session
-export const getViewerCount = async (req, res) => {
-    try {
-        const { sessionId } = req.params;
-
-        const liveSession = await LiveSession.findById(sessionId);
-
-        if (!liveSession) {
-            return res.status(404).json({
-                success: false,
-                message: "Live session not found"
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            viewerCount: liveSession.viewers.length,
-            isLive: liveSession.isLive
-        });
-    } catch (error) {
-        console.error("Get viewer count error:", error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
-};
-
-// Toggle live session status (start/end) - Single endpoint for both
-export const toggleLiveSession = async (req, res) => {
-    try {
-        const { sessionId, streamKey } = req.body;
-
-        const liveSession = await LiveSession.findOne({ _id: sessionId, streamKey });
-
-        if (!liveSession) {
-            return res.status(404).json({
-                success: false,
-                message: "Live session not found or invalid stream key"
-            });
-        }
-
-        if (liveSession.isLive) {
-            // End the session
-            liveSession.isLive = false;
-            liveSession.endedAt = new Date();
-            await liveSession.save();
-
-            // Create notification record
-            const notification = new LiveNotification({
-                liveSessionId: liveSession._id,
-                type: 'ended'
-            });
-            await notification.save();
-
-            res.status(200).json({
-                success: true,
-                message: "Live session ended",
+            const upcomingSessions = await LiveSession.find({
+                isScheduled: true,
                 isLive: false,
-                liveSession
-            });
-        } else {
-            // Start the session
-            const owner = await getOwnerDetails(liveSession.createdbyId);
+                scheduledAt: { $lte: reminderThreshold, $gt: now },
+                reminderSent: false
+            }).populate('createdbyId');
 
-            liveSession.isLive = true;
-            liveSession.startedAt = new Date();
-            liveSession.endedAt = null;
-            await liveSession.save();
+            for (const session of upcomingSessions) {
+                const houseSeekers = await getAllHouseSeekersEmails();
+                const owner = session.createdbyId;
 
-            // Get all house seekers
-            const houseSeekers = await getAllHouseSeekersEmails();
+                const reminderPromises = houseSeekers.map(email =>
+                    sendLiveNotificationEmail(email, session, owner, 'reminder')
+                );
 
-            // Send notifications
-            const notificationPromises = houseSeekers.map(seeker =>
-                sendLiveNotificationEmail(seeker.email, liveSession, owner)
-            );
+                if (owner?.email) {
+                    reminderPromises.push(sendLiveNotificationEmail(owner.email, session, owner, 'reminder'));
+                }
 
-            const notification = new LiveNotification({
-                liveSessionId: liveSession._id,
-                recipientIds: houseSeekers.map(s => s.email),
-                type: 'started'
-            });
-            await notification.save();
+                await Promise.all(reminderPromises);
 
-            // Send in background
-            Promise.all(notificationPromises).catch(err =>
-                console.error("Error sending notifications:", err)
-            );
+                session.reminderSent = true;
+                await session.save();
 
-            res.status(200).json({
-                success: true,
-                message: `Live session started. Notifications sent to ${houseSeekers.length} users.`,
-                isLive: true,
-                roomUrl: `https://sfu.mirotalk.com/join/?room=${liveSession.streamKey}`,
-                liveSession
-            });
+                const notification = new LiveNotification({
+                    liveSessionId: session._id,
+                    recipientIds: houseSeekers,
+                    type: 'reminder'
+                });
+                await notification.save();
+
+                console.log(`✅ Reminders sent for session: ${session.title}`);
+            }
+        } catch (error) {
+            console.error("Reminder cron error:", error);
         }
-    } catch (error) {
-        console.error("Toggle live session error:", error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
+    }, 60000); // Check every minute
 };
 
 // Route definitions
 router.post("/live/create", createLiveSession);
-router.post("/live/start", startLiveSession);
-router.post("/live/end", endLiveSession);
+router.post("/live/toggle", toggleLiveSession);
 router.delete("/live/delete", deleteLiveSession);
 router.get("/live/owner/:ownerId", getOwnerLiveSessions);
 router.get("/live/owner/:ownerId/active", getActiveLiveSession);
 router.get("/live/active", getActiveLiveSessions);
-router.get("/live/:sessionId", getLiveSession);
+router.get("/live/scheduled", getScheduledLiveSessions);
+router.get("/live/all", getAllLiveSessions);
 router.post("/live/join", joinLiveSession);
-router.post("/live/leave", leaveLiveSession);
-router.get("/live/viewers/:sessionId", getViewerCount);
-router.post("/live/toggle", toggleLiveSession);
 
 export default router;

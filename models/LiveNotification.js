@@ -8,7 +8,7 @@ const liveNotificationSchema = new mongoose.Schema({
         required: true
     },
     recipientIds: {
-        type: [mongoose.Schema.Types.ObjectId],
+        type: [String],
         default: []
     },
     sentAt: {
@@ -17,7 +17,7 @@ const liveNotificationSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['started', 'ended', 'scheduled'],
+        enum: ['started', 'ended', 'scheduled', 'reminder'],
         default: 'started'
     }
 }, { timestamps: true });
