@@ -106,11 +106,12 @@ const BASE_URL = process.env.NKWA_BASE_URL; // https://api.pay.staging.mynkwa.co
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
+    // ── Validate inputs ──
     if (!phoneNumber || !amount || !id || !role)
         return res.status(400).json({ message: "Missing required fields" });
 
     if (!/^2376\d{8}$/.test(phoneNumber))
-        return res.status(400).json({ message: "Invalid Cameroon phone number" });
+        return res.status(400).json({ message: "Invalid phone number. Use format: 2376XXXXXXXX" });
 
     if (Number(amount) < 50)
         return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
@@ -118,40 +119,54 @@ router.post("/pay", async (req, res) => {
     try {
         const Model = role === "owner" ? HouseOwnerModel : UserModel;
 
+        // ── Verify user exists before calling NKWA ──
+        const userExists = await Model.findById(id);
+        if (!userExists)
+            return res.status(404).json({ message: "User not found" });
+
+        // ── Log what we're sending so you can debug ──
+        console.log("→ NKWA collect request:", {
+            url: `${process.env.NKWA_BASE_URL}/collect`,
+            apiKeyPreview: process.env.API_KEY?.slice(0, 10) + "...",
+            body: { amount: Number(amount), phoneNumber }
+        });
+
+        // ── Call NKWA — only send amount + phoneNumber (per spec) ──
         const response = await axios.post(
             `${process.env.NKWA_BASE_URL}/collect`,
             {
                 amount: Number(amount),
-                phoneNumber,
-                description: description || "collection"
+                phoneNumber: phoneNumber.trim(),
+                // description is NOT in the official spec, removed
             },
             {
                 headers: {
-                    "X-API-KEY": process.env.API_KEY,  // ← FIXED: was "X-API-Key"
+                    "X-API-Key": process.env.API_KEY,   // exact casing from NKWA docs
                     "Content-Type": "application/json"
-                }
+                },
+                timeout: 15000  // 15s timeout — NKWA can be slow
             }
         );
 
         const nkwaData = response.data;
+        console.log("← NKWA response:", nkwaData);
 
         if (!nkwaData?.id)
-            return res.status(500).json({ message: "NKWA did not return transaction ID" });
+            return res.status(500).json({ message: "NKWA did not return a transaction ID" });
 
+        // ── Save transaction ──
         const transaction = {
             nkwaTransactionId: nkwaData.id,
-            internalRef: nkwaData.internalRef,
-            merchantId: nkwaData.merchantId,
             amount: nkwaData.amount,
             currency: nkwaData.currency,
             fee: nkwaData.fee,
-            merchantPaidFee: nkwaData.merchantPaidFee,
             phoneNumber: nkwaData.phoneNumber,
             telecomOperator: nkwaData.telecomOperator,
             status: nkwaData.status || "pending",
-            added: "notadded",   // ← make sure this is always set
+            added: "notadded",
             paymentType: nkwaData.paymentType,
-            description: nkwaData.description
+            description: description || "",
+            createdAt: new Date()
         };
 
         await Model.findByIdAndUpdate(
@@ -163,10 +178,20 @@ router.post("/pay", async (req, res) => {
         return res.status(201).json({ message: "Payment initiated", transaction });
 
     } catch (err) {
-        console.error("Payment error:", err.response?.data || err.message);
+        // ── Log the REAL error so you can see exactly what NKWA says ──
+        const nkwaError = err.response?.data;
+        const httpStatus = err.response?.status;
+
+        console.error("✗ NKWA /collect failed:", {
+            httpStatus,
+            nkwaError,
+            rawMessage: err.message
+        });
+
         return res.status(500).json({
             message: "Payment process failed",
-            error: err.response?.data || err.message
+            nkwaStatus: httpStatus,
+            nkwaError: nkwaError     // send this to frontend so YOU can see it
         });
     }
 });
