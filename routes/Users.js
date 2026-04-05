@@ -102,6 +102,7 @@ router.post("/register", async (req, res) => {
             profile:
                 profile ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&size=128`,
+
         });
 
         const savedUser = await newUser.save();

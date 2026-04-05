@@ -14,27 +14,112 @@ const BASE_URL = process.env.NKWA_BASE_URL; // https://api.pay.staging.mynkwa.co
 
 
 
+// router.post("/pay", async (req, res) => {
+//     const { phoneNumber, amount, description, role, id } = req.body;
+
+//     if (!phoneNumber || !amount || !id || !role) {
+//         return res.status(400).json({ message: "Missing required fields" });
+//     }
+
+//     if (!/^2376\d{8}$/.test(phoneNumber)) {
+//         return res.status(400).json({ message: "Invalid Cameroon phone number" });
+//     }
+
+//     if (Number(amount) < 50) {
+//         return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
+//     }
+
+//     try {
+//         const Model = role === "owner" ? HouseOwnerModel : UserModel;
+
+//         // 🔹 Call NKWA FIRST
+//         const response = await axios.post(
+//             `${BASE_URL}/collect`,
+//             {
+//                 amount: Number(amount),
+//                 phoneNumber,
+//                 description: description || "collection"
+//             },
+//             {
+//                 headers: {
+//                     "X-API-Key": API_KEY,
+//                     "Content-Type": "application/json"
+//                 }
+//             }
+//         );
+
+//         const nkwaData = response.data;
+
+//         // 🚨 Extra safety check
+//         if (!nkwaData?.id) {
+//             return res.status(500).json({
+//                 message: "NKWA did not return transaction ID"
+//             });
+//         }
+
+//         const transaction = {
+//             nkwaTransactionId: nkwaData.id,
+//             internalRef: nkwaData.internalRef,
+//             merchantId: nkwaData.merchantId,
+//             amount: nkwaData.amount,
+//             currency: nkwaData.currency,
+//             fee: nkwaData.fee,
+//             merchantPaidFee: nkwaData.merchantPaidFee,
+//             phoneNumber: nkwaData.phoneNumber,
+//             telecomOperator: nkwaData.telecomOperator,
+//             status: nkwaData.status || "pending",
+//             paymentType: nkwaData.paymentType,
+//             description: nkwaData.description
+//         };
+
+//         await Model.findByIdAndUpdate(
+//             id,
+//             { $push: { paymentprscribtion: transaction } },
+//             { new: true }
+//         );
+
+//         return res.status(201).json({
+//             message: "Payment initiated successfully",
+//             transaction
+//         });
+
+//     } catch (err) {
+//         console.error("Payment process failed:", err.response?.data || err.message);
+
+//         return res.status(500).json({
+//             message: "Payment process failed",
+//             error: err.response?.data || err.message
+//         });
+//     }
+// });
+
+
+
+
+
+
+
+
+
+
+
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
-    if (!phoneNumber || !amount || !id || !role) {
+    if (!phoneNumber || !amount || !id || !role)
         return res.status(400).json({ message: "Missing required fields" });
-    }
 
-    if (!/^2376\d{8}$/.test(phoneNumber)) {
+    if (!/^2376\d{8}$/.test(phoneNumber))
         return res.status(400).json({ message: "Invalid Cameroon phone number" });
-    }
 
-    if (Number(amount) < 50) {
+    if (Number(amount) < 50)
         return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
-    }
 
     try {
         const Model = role === "owner" ? HouseOwnerModel : UserModel;
 
-        // 🔹 Call NKWA FIRST
         const response = await axios.post(
-            `${BASE_URL}/collect`,
+            `${process.env.NKWA_BASE_URL}/collect`,
             {
                 amount: Number(amount),
                 phoneNumber,
@@ -42,7 +127,7 @@ router.post("/pay", async (req, res) => {
             },
             {
                 headers: {
-                    "X-API-Key": API_KEY,
+                    "X-API-KEY": process.env.API_KEY,  // ← FIXED: was "X-API-Key"
                     "Content-Type": "application/json"
                 }
             }
@@ -50,12 +135,8 @@ router.post("/pay", async (req, res) => {
 
         const nkwaData = response.data;
 
-        // 🚨 Extra safety check
-        if (!nkwaData?.id) {
-            return res.status(500).json({
-                message: "NKWA did not return transaction ID"
-            });
-        }
+        if (!nkwaData?.id)
+            return res.status(500).json({ message: "NKWA did not return transaction ID" });
 
         const transaction = {
             nkwaTransactionId: nkwaData.id,
@@ -68,6 +149,7 @@ router.post("/pay", async (req, res) => {
             phoneNumber: nkwaData.phoneNumber,
             telecomOperator: nkwaData.telecomOperator,
             status: nkwaData.status || "pending",
+            added: "notadded",   // ← make sure this is always set
             paymentType: nkwaData.paymentType,
             description: nkwaData.description
         };
@@ -78,22 +160,16 @@ router.post("/pay", async (req, res) => {
             { new: true }
         );
 
-        return res.status(201).json({
-            message: "Payment initiated successfully",
-            transaction
-        });
+        return res.status(201).json({ message: "Payment initiated", transaction });
 
     } catch (err) {
-        console.error("Payment process failed:", err.response?.data || err.message);
-
+        console.error("Payment error:", err.response?.data || err.message);
         return res.status(500).json({
             message: "Payment process failed",
             error: err.response?.data || err.message
         });
     }
 });
-
-
 
 
 

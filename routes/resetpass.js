@@ -10,6 +10,7 @@ import bcrypt from "bcrypt";
 const router = express.Router()
 const SALT_ROUNDS = 10;
 
+
 const sendBrevoEmail = async (email, otpCode) => {
     const options = { 
   weekday: 'long', 
