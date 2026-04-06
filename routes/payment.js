@@ -1,4 +1,4 @@
-// paymentRoutes.js - Complete Working MeSomb Integration
+// paymentRoutes.js - Complete Working MeSomb Integration (FIXED)
 import express from "express";
 import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
@@ -6,6 +6,7 @@ import HouseOwnerModel from "../models/HouseOwners.js";
 import { PaymentOperation } from '@hachther/mesomb';
 import crypto from 'crypto';
 import https from 'https';
+import fetch from 'node-fetch';  // ← CRITICAL: Missing import
 
 dotenv.config();
 const router = express.Router();
@@ -71,7 +72,6 @@ function getServiceFromPhone(phoneNumber) {
     return 'MTN';
 }
 
-// Helper function for delay
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -142,7 +142,7 @@ router.get("/test-network", async (req, res) => {
     }
 });
 
-// ========== PAYMENT ENDPOINT WITH RETRY LOGIC ==========
+// ========== PAYMENT ENDPOINT WITH RETRY LOGIC (FIXED) ==========
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
@@ -203,7 +203,7 @@ router.post("/pay", async (req, res) => {
 
         console.log(`💰 Processing: ${amountNum} XAF from ${formattedPhone} (${service})`);
 
-        // Retry logic for network issues
+        // Retry logic for network issues (same as working server)
         let response;
         let retries = 3;
         let lastError;
@@ -273,7 +273,6 @@ router.post("/pay", async (req, res) => {
         if (!isSuccess) {
             let errorMessage = response.message || "Transaction failed";
             
-            // Handle specific errors
             if (errorMessage.includes("does not know the recipient")) {
                 errorMessage = "Your merchant account is not properly configured. Please contact MeSomb support to activate your account for receiving payments.";
             } else if (errorMessage.includes("insufficient")) {
@@ -338,9 +337,6 @@ router.post("/pay", async (req, res) => {
         } else if (errorMessage.includes("fetch failed") || errorMessage.includes("timeout")) {
             errorMessage = "Network error: Cannot connect to payment service. Please try again.";
             statusCode = 503;
-        } else if (errorMessage.includes("timeout")) {
-            errorMessage = "Request timeout. Please try again.";
-            statusCode = 504;
         }
         
         return res.status(statusCode).json({
@@ -351,6 +347,119 @@ router.post("/pay", async (req, res) => {
     }
 });
 
+// ========== SIMPLE PAYMENT ENDPOINT (LIKE WORKING SERVER) ==========
+router.post("/pay-me", async (req, res) => {
+    try {
+        const { phone, amount, service } = req.body;
+
+        console.log('\n💰 User wants to deposit money:');
+        console.log(`  User Phone: ${phone}`);
+        console.log(`  Amount: ${amount} XAF`);
+        console.log(`  Service: ${service}`);
+
+        if (!phone || !amount || !service) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: phone, amount, service'
+            });
+        }
+
+        let response;
+        let retries = 3;
+        let lastError;
+
+        while (retries > 0) {
+            try {
+                console.log(`Attempting payment (${retries} retries left)...`);
+
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
+                });
+
+                const paymentPromise = paymentClient.makeCollect({
+                    payer: phone,
+                    amount: parseFloat(amount),
+                    service: service.toUpperCase(),
+                    country: 'CM',
+                    currency: 'XAF',
+                    fees: true,
+                    conversion: false,
+                    customer: {
+                        email: `user_${Date.now()}@example.com`,
+                        firstName: 'User',
+                        lastName: 'Customer',
+                        town: 'Douala',
+                        region: 'Littoral',
+                        country: 'CM',
+                        address: 'User Address'
+                    },
+                    location: {
+                        town: 'Douala',
+                        region: 'Littoral',
+                        country: 'CM'
+                    },
+                    products: [{
+                        name: 'Deposit to Merchant',
+                        category: 'Payment',
+                        quantity: 1,
+                        amount: parseFloat(amount)
+                    }]
+                });
+
+                response = await Promise.race([paymentPromise, timeoutPromise]);
+                break;
+
+            } catch (error) {
+                lastError = error;
+                console.log(`Attempt failed: ${error.message}`);
+                retries--;
+                if (retries > 0) await delay(2000);
+            }
+        }
+
+        if (!response) {
+            throw lastError || new Error('All payment attempts failed');
+        }
+
+        const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
+
+        if (isSuccess) {
+            res.json({
+                success: true,
+                message: `Successfully collected ${amount} XAF from ${phone}`,
+                transactionId: response.transaction?.pk,
+                status: response.status,
+                amountCollected: amount,
+                user: phone,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.json({
+                success: false,
+                message: response.message || 'Payment collection failed',
+                status: response.status
+            });
+        }
+
+    } catch (error) {
+        console.error('❌ Collection error:', error);
+
+        if (error.message.includes('fetch failed') || error.message.includes('timeout')) {
+            res.status(500).json({
+                success: false,
+                message: 'Network error: Cannot connect to MeSomb servers',
+                error: error.message
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: error.message,
+                details: error.toString()
+            });
+        }
+    }
+});
+
 // ========== OFFLINE TEST MODE ==========
 router.post("/pay-offline", async (req, res) => {
     const { phoneNumber, amount, role, id } = req.body;
@@ -358,7 +467,6 @@ router.post("/pay-offline", async (req, res) => {
     console.log('⚠️ OFFLINE MODE: Simulating payment');
     console.log('Request:', { phoneNumber, amount, role, id });
 
-    // Simulate successful payment for testing
     res.json({
         success: true,
         message: '⚠️ OFFLINE MODE: Payment simulated (no real transaction)',
@@ -373,13 +481,7 @@ router.get("/reconcile-payments", async (req, res) => {
     try {
         console.log('🔄 Starting reconciliation...');
         
-        const results = { 
-            checked: 0, 
-            updated: 0, 
-            credited: 0, 
-            errors: 0 
-        };
-        
+        const results = { checked: 0, updated: 0, credited: 0, errors: 0 };
         const models = [UserModel, HouseOwnerModel];
 
         for (const model of models) {
@@ -417,10 +519,7 @@ router.get("/reconcile-payments", async (req, res) => {
                                 results.credited++;
                             }
 
-                            await model.updateOne(
-                                { _id: user._id },
-                                updateQuery
-                            );
+                            await model.updateOne({ _id: user._id }, updateQuery);
                             results.updated++;
                         }
                     } catch (err) {
@@ -431,18 +530,10 @@ router.get("/reconcile-payments", async (req, res) => {
             }
         }
         
-        res.status(200).json({ 
-            success: true,
-            message: "Reconciliation complete", 
-            results 
-        });
+        res.status(200).json({ success: true, message: "Reconciliation complete", results });
     } catch (error) {
         console.error("Reconciliation error:", error);
-        res.status(500).json({ 
-            success: false,
-            message: "Reconciliation failed", 
-            error: error.message 
-        });
+        res.status(500).json({ success: false, message: "Reconciliation failed", error: error.message });
     }
 });
 
@@ -452,19 +543,13 @@ router.post("/credit-user/:email", async (req, res) => {
         const { email } = req.params;
 
         if (!email) {
-            return res.status(400).json({ 
-                success: false,
-                message: "Email is required" 
-            });
+            return res.status(400).json({ success: false, message: "Email is required" });
         }
 
         let user = await UserModel.findOne({ email }) || await HouseOwnerModel.findOne({ email });
 
         if (!user) {
-            return res.status(404).json({ 
-                success: false,
-                message: "User not found" 
-            });
+            return res.status(404).json({ success: false, message: "User not found" });
         }
 
         let totalToAdd = 0;
@@ -495,11 +580,7 @@ router.post("/credit-user/:email", async (req, res) => {
 
     } catch (error) {
         console.error("Credit error:", error);
-        return res.status(500).json({ 
-            success: false,
-            message: "Credit process failed", 
-            error: error.message 
-        });
+        return res.status(500).json({ success: false, message: "Credit process failed", error: error.message });
     }
 });
 
@@ -517,377 +598,15 @@ router.get("/user/me/:email", async (req, res) => {
         }
         
         if (!user) {
-            return res.status(404).json({ 
-                success: false,
-                message: "User not found" 
-            });
+            return res.status(404).json({ success: false, message: "User not found" });
         }
         
         const userData = user.toObject();
         delete userData.password;
         
-        res.status(200).json({
-            success: true,
-            user: {
-                ...userData,
-                role: role
-            }
-        });
+        res.status(200).json({ success: true, user: { ...userData, role: role } });
     } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            message: error.message 
-        });
-    }
-});
-
-// ========== ACTIVATE VERIFICATION (HOUSE OWNER) ==========
-router.post("/activate-verification/:email", async (req, res) => {
-    try {
-        const { months } = req.body;
-        const { email } = req.params;
-
-        if (!months || months < 1) {
-            return res.status(400).json({ 
-                success: false,
-                message: "Invalid months selected" 
-            });
-        }
-
-        const baseFee = 5000;
-        const monthlyFee = 400;
-        const totalCost = baseFee + (months * monthlyFee);
-
-        const user = await HouseOwnerModel.findOne({ email });
-
-        if (!user) {
-            return res.status(404).json({ 
-                success: false,
-                message: "User not found" 
-            });
-        }
-
-        if ((user.totalBalance || 0) < totalCost) {
-            return res.status(400).json({
-                success: false,
-                message: `Insufficient balance. Need ${totalCost} XAF, have ${user.totalBalance || 0} XAF`
-            });
-        }
-
-        const now = new Date();
-        const expiry = new Date();
-        expiry.setMonth(expiry.getMonth() + months);
-
-        user.totalBalance -= totalCost;
-        user.verified = true;
-        user.verificationbalance = months;
-        user.dateofverification = now;
-        user.verificationexpirydate = expiry;
-
-        await user.save();
-
-        res.status(200).json({
-            success: true,
-            message: "Verification activated successfully",
-            expiry,
-            remainingBalance: user.totalBalance
-        });
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ 
-            success: false,
-            message: "Server error" 
-        });
-    }
-});
-
-// ========== SUBSCRIBE TO VIEW (USERS) ==========
-router.post("/subscribe-to-view", async (req, res) => {
-    const { userId, months } = req.body;
-    const PRICE_PER_MONTH = 50;
-    const numMonths = parseInt(months) || 1;
-    const totalCost = PRICE_PER_MONTH * numMonths;
-
-    try {
-        const user = await UserModel.findById(userId);
-
-        if (!user) {
-            return res.status(404).json({ 
-                success: false,
-                message: "User not found" 
-            });
-        }
-
-        if ((user.totalBalance || 0) < totalCost) {
-            return res.status(400).json({
-                success: false,
-                message: `Insufficient balance. You need ${totalCost} XAF for ${numMonths} month(s).`
-            });
-        }
-
-        const now = new Date();
-        let currentExpiry = user.paytoviewenddate;
-        let baseDate = (user.haspay && currentExpiry && currentExpiry > now)
-            ? new Date(currentExpiry)
-            : now;
-
-        const newEndDate = new Date(baseDate);
-        newEndDate.setMonth(newEndDate.getMonth() + numMonths);
-
-        user.totalBalance -= totalCost;
-        user.haspay = true;
-        user.paytoviewdetailstartdate = now;
-        user.paytoviewenddate = newEndDate;
-
-        user.paymentprscribtion.push({
-            nkwaTransactionId: generateTransactionId('sub'),
-            amount: totalCost,
-            status: "SUCCESS",
-            added: "added",
-            description: `Purchased ${numMonths} month(s) view access`,
-            paymentType: "disbursement",
-            verifiedAt: now,
-            createdAt: now
-        });
-
-        await user.save();
-
-        res.status(200).json({
-            success: true,
-            message: `Successfully subscribed for ${numMonths} month(s)!`,
-            newExpiry: user.paytoviewenddate,
-            balanceRemaining: user.totalBalance
-        });
-
-    } catch (error) {
-        console.error("Subscription Error:", error);
-        res.status(500).json({ 
-            success: false,
-            message: "Internal server error" 
-        });
-    }
-});
-
-// ========== DISBURSE MONEY TO USER (WITHDRAWAL) ==========
-router.post("/payments", async (req, res) => {
-    const { phone, amount } = req.body;
-
-    if (!phone || !amount) {
-        return res.status(400).json({
-            success: false,
-            message: "Phone and amount are required"
-        });
-    }
-
-    if (!validateCameroonPhone(phone)) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid phone number format"
-        });
-    }
-
-    if (!meSombInitialized || !paymentClient) {
-        return res.status(503).json({
-            success: false,
-            message: "Payment system not available"
-        });
-    }
-
-    try {
-        const formattedPhone = formatPhoneNumber(phone);
-        const service = getServiceFromPhone(formattedPhone);
-
-        const response = await paymentClient.makeDeposit({
-            receiver: formattedPhone,
-            amount: Number(amount),
-            service: service,
-            country: 'CM',
-            currency: 'XAF',
-            conversion: false,
-            customer: {
-                email: `user_${formattedPhone}@example.com`,
-                first_name: 'User',
-                last_name: formattedPhone,
-                town: 'Douala',
-                region: 'Littoral',
-                country: 'CM',
-                address: 'User Address'
-            },
-            location: {
-                town: 'Douala',
-                region: 'Littoral',
-                country: 'CM'
-            },
-            products: [{
-                name: 'Withdrawal',
-                category: 'Cashout',
-                quantity: 1,
-                amount: Number(amount)
-            }]
-        });
-
-        const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
-
-        if (!isSuccess) {
-            return res.status(400).json({
-                success: false,
-                message: response.message || "Disbursement failed"
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: "Disbursement successful",
-            data: {
-                id: response.transaction?.pk,
-                amount: amount,
-                phoneNumber: formattedPhone,
-                status: response.status
-            }
-        });
-
-    } catch (err) {
-        console.error("Disbursement failed:", err);
-        res.status(500).json({
-            success: false,
-            message: err.message
-        });
-    }
-});
-
-// ========== GET ALL TRANSACTIONS ==========
-router.get("/all-transactions", async (req, res) => {
-    try {
-        const fetchFromModel = async (Model, roleLabel) => {
-            return await Model.aggregate([
-                { $match: { "paymentprscribtion.0": { $exists: true } } },
-                { $unwind: "$paymentprscribtion" },
-                {
-                    $project: {
-                        _id: 0,
-                        transactionId: "$paymentprscribtion._id",
-                        nkwaId: "$paymentprscribtion.nkwaTransactionId",
-                        amount: "$paymentprscribtion.amount",
-                        status: "$paymentprscribtion.status",
-                        date: "$paymentprscribtion.createdAt",
-                        ownerName: "$name",
-                        ownerEmail: "$email",
-                        ownerRole: roleLabel,
-                        ownerId: "$_id",
-                        phoneNumber: "$paymentprscribtion.phoneNumber",
-                        description: "$paymentprscribtion.description"
-                    }
-                }
-            ]);
-        };
-
-        const [userTransactions, ownerTransactions] = await Promise.all([
-            fetchFromModel(UserModel, "User"),
-            fetchFromModel(HouseOwnerModel, "HouseOwner")
-        ]);
-
-        const allTransactions = [...userTransactions, ...ownerTransactions]
-            .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        res.status(200).json({
-            success: true,
-            count: allTransactions.length,
-            transactions: allTransactions
-        });
-
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            message: error.message 
-        });
-    }
-});
-
-// ========== GET ALL USERS ==========
-router.get("/all-users", async (req, res) => {
-    try {
-        const [users, owners] = await Promise.all([
-            UserModel.find({}).select("-password"),
-            HouseOwnerModel.find({}).select("-password"),
-        ]);
-
-        const combined = [
-            ...users.map((u) => ({ 
-                ...u._doc, 
-                collectionType: "user",
-                role: "seeker"
-            })),
-            ...owners.map((o) => ({ 
-                ...o._doc, 
-                collectionType: "houseowner",
-                role: "owner"
-            })),
-        ];
-
-        res.status(200).json({
-            success: true,
-            count: combined.length,
-            users: combined,
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            message: error.message 
-        });
-    }
-});
-
-// ========== UPDATE USER STATUS ==========
-router.patch("/update-status/:id", async (req, res) => {
-    const { id } = req.params;
-    const { accountstatus, reason, collectionType } = req.body;
-
-    const validStatuses = ["active", "suspended", "ban", "deactivated", "review"];
-    if (!validStatuses.includes(accountstatus)) {
-        return res.status(400).json({
-            success: false,
-            message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`
-        });
-    }
-
-    try {
-        let updatedUser = null;
-        const isOwner = collectionType === "houseowner" || collectionType === "owner";
-
-        if (isOwner) {
-            updatedUser = await HouseOwnerModel.findByIdAndUpdate(
-                id,
-                { $set: { accountstatus, reason: reason || "No reason provided" } },
-                { new: true, runValidators: true }
-            ).select("-password");
-        } else {
-            updatedUser = await UserModel.findByIdAndUpdate(
-                id,
-                { $set: { accountstatus, reason: reason || "No reason provided" } },
-                { new: true, runValidators: true }
-            ).select("-password");
-        }
-
-        if (!updatedUser) {
-            return res.status(404).json({
-                success: false,
-                message: "Account not found in the database."
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: `Account has been successfully set to ${accountstatus}`,
-            data: updatedUser,
-        });
-
-    } catch (error) {
-        console.error("Update status error:", error);
-        res.status(500).json({
-            success: false,
-            message: "Internal Server Error: " + error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -919,14 +638,6 @@ router.get("/payment-health", async (req, res) => {
             initialized: meSombInitialized,
             reachable: meSombStatus === 'reachable',
             status: meSombStatus
-        },
-        endpoints: {
-            pay: "POST /api/pay - Real payment",
-            offline: "POST /api/pay-offline - Test mode",
-            reconcile: "GET /api/reconcile-payments",
-            credit: "POST /api/credit-user/:email",
-            debug: "GET /api/debug-mesomb",
-            testNetwork: "GET /api/test-network"
         }
     });
 });
@@ -937,9 +648,9 @@ router.get("/test-payment", (req, res) => {
         success: true,
         message: "Payment routes are working!",
         meSombStatus: meSombInitialized ? "Connected" : "Not Connected",
-        environment: process.env.NODE_ENV || 'development',
         endpoints: {
             pay: "POST /api/pay",
+            payMe: "POST /api/pay-me (simpler version)",
             payOffline: "POST /api/pay-offline",
             reconcile: "GET /api/reconcile-payments",
             credit: "POST /api/credit-user/:email",
