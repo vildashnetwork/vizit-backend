@@ -1,4 +1,4 @@
-// paymentRoutes.js - Complete Working MeSomb Integration (FIXED)
+// paymentRoutes.js - Complete Integrated MeSomb Payment System
 import express from "express";
 import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
@@ -6,7 +6,7 @@ import HouseOwnerModel from "../models/HouseOwners.js";
 import { PaymentOperation } from '@hachther/mesomb';
 import crypto from 'crypto';
 import https from 'https';
-import fetch from 'node-fetch';  // ← CRITICAL: Missing import
+import fetch from 'node-fetch';
 
 dotenv.config();
 const router = express.Router();
@@ -142,221 +142,467 @@ router.get("/test-network", async (req, res) => {
     }
 });
 
-// ========== PAYMENT ENDPOINT WITH RETRY LOGIC (FIXED) ==========
+// ========== INTEGRATED PAYMENT ENDPOINT (USING /pay-me LOGIC) ==========
+// router.post("/pay", async (req, res) => {
+//     const { phoneNumber, amount, description, role, id } = req.body;
+
+//     console.log("📱 Payment request:", { phoneNumber, amount, role, id });
+
+//     // Validate inputs
+//     if (!phoneNumber || !amount || !id || !role) {
+//         return res.status(400).json({
+//             success: false,
+//             message: "Missing required fields: phoneNumber, amount, id, role"
+//         });
+//     }
+
+//     if (!validateCameroonPhone(phoneNumber)) {
+//         return res.status(400).json({
+//             success: false,
+//             message: "Invalid phone number. Use format: 6XXXXXXXX or 2376XXXXXXXX"
+//         });
+//     }
+
+//     const amountNum = Number(amount);
+//     if (amountNum < 50) {
+//         return res.status(400).json({
+//             success: false,
+//             message: "Minimum payment is 50 FCFA"
+//         });
+//     }
+
+//     if (amountNum > 500000) {
+//         return res.status(400).json({
+//             success: false,
+//             message: "Maximum payment is 500,000 FCFA"
+//         });
+//     }
+
+//     if (!meSombInitialized || !paymentClient) {
+//         return res.status(503).json({
+//             success: false,
+//             message: "Payment system not configured. Please contact support.",
+//             solution: "Check MeSomb credentials in environment variables"
+//         });
+//     }
+
+//     try {
+//         const Model = role === "owner" ? HouseOwnerModel : UserModel;
+//         const userExists = await Model.findById(id);
+
+//         if (!userExists) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "User not found"
+//             });
+//         }
+
+//         const formattedPhone = formatPhoneNumber(phoneNumber);
+//         const transactionId = generateTransactionId('pay');
+//         const service = getServiceFromPhone(formattedPhone);
+
+//         console.log(`💰 Processing payment: ${amountNum} XAF from ${formattedPhone} (${service})`);
+
+//         // DIRECT PAYMENT USING THE WORKING /pay-me LOGIC
+//         let response;
+//         let retries = 3;
+//         let lastError;
+
+//         while (retries > 0) {
+//             try {
+//                 console.log(`Attempting payment (${retries} retries left)...`);
+
+//                 const timeoutPromise = new Promise((_, reject) => {
+//                     setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
+//                 });
+
+//                 const paymentPromise = paymentClient.makeCollect({
+//                     payer: formattedPhone,
+//                     amount: amountNum,
+//                     service: service,
+//                     country: 'CM',
+//                     currency: 'XAF',
+//                     fees: true,
+//                     conversion: false,
+//                     customer: {
+//                         email: userExists.email || `${formattedPhone}@user.com`,
+//                         firstName: userExists.name?.split(' ')[0] || 'User',
+//                         lastName: userExists.name?.split(' ')[1] || 'Customer',
+//                         town: userExists.town || 'Douala',
+//                         region: userExists.region || 'Littoral',
+//                         country: 'CM',
+//                         address: userExists.address || 'Customer Address'
+//                     },
+//                     location: {
+//                         town: userExists.town || 'Douala',
+//                         region: userExists.region || 'Littoral',
+//                         country: 'CM'
+//                     },
+//                     products: [{
+//                         name: description || 'VIZIT Token Purchase',
+//                         category: 'Virtual Currency',
+//                         quantity: 1,
+//                         amount: amountNum
+//                     }]
+//                 });
+
+//                 response = await Promise.race([paymentPromise, timeoutPromise]);
+//                 break;
+
+//             } catch (error) {
+//                 lastError = error;
+//                 console.log(`Attempt failed: ${error.message}`);
+//                 retries--;
+
+//                 if (retries > 0) {
+//                     console.log(`Waiting 2 seconds before retry...`);
+//                     await delay(2000);
+//                 }
+//             }
+//         }
+
+//         if (!response) {
+//             throw lastError || new Error('All payment attempts failed');
+//         }
+
+//         console.log("✅ MeSomb response received");
+
+//         const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
+
+//         if (!isSuccess) {
+//             let errorMessage = response.message || "Transaction failed";
+
+//             if (errorMessage.includes("does not know the recipient")) {
+//                 errorMessage = "Your merchant account is not properly configured. Please contact MeSomb support to activate your account for receiving payments.";
+//             } else if (errorMessage.includes("insufficient")) {
+//                 errorMessage = "Insufficient funds in merchant account. Please contact support.";
+//             } else if (errorMessage.includes("timeout")) {
+//                 errorMessage = "Payment request timed out. Please try again.";
+//             }
+
+//             return res.status(400).json({
+//                 success: false,
+//                 message: errorMessage,
+//                 error: response.status,
+//                 solution: "Verify your MeSomb merchant account is activated for collections"
+//             });
+//         }
+
+//         // Create transaction object
+//         const transaction = {
+//             nkwaTransactionId: response.transaction?.pk || transactionId,
+//             internalRef: response.transaction?.reference || transactionId,
+//             merchantId: response.application,
+//             amount: amountNum,
+//             currency: 'XAF',
+//             fee: response.transaction?.fees || 0,
+//             merchantPaidFee: false,
+//             phoneNumber: formattedPhone,
+//             telecomOperator: service,
+//             status: "pending",
+//             added: "notadded",
+//             paymentType: "collection",
+//             description: description || "VIZIT token purchase",
+//             createdAt: new Date(),
+//             updatedAt: new Date(),
+//             rawResponse: {
+//                 status: response.status,
+//                 transactionId: response.transaction?.pk,
+//                 message: response.message
+//             }
+//         };
+
+//         // Save transaction to user's account
+//         await Model.findByIdAndUpdate(
+//             id,
+//             { $push: { paymentprscribtion: transaction } },
+//             { new: true }
+//         );
+
+//         // Also store in the other model for cross-reference (optional)
+//         const otherModel = role === "owner" ? UserModel : HouseOwnerModel;
+//         await otherModel.findOneAndUpdate(
+//             { email: userExists.email },
+//             { $push: { paymentprscribtion: { ...transaction, crossReference: true } } },
+//             { new: true, upsert: false }
+//         ).catch(() => console.log('Could not save to other model'));
+
+//         console.log(`✅ Payment initiated successfully for ${userExists.email}`);
+
+//         return res.status(201).json({
+//             success: true,
+//             message: "Payment initiated successfully",
+//             transaction: {
+//                 id: transaction.nkwaTransactionId,
+//                 amount: transaction.amount,
+//                 status: transaction.status,
+//                 phoneNumber: transaction.phoneNumber,
+//                 telecomOperator: transaction.telecomOperator
+//             },
+//             meSombResponse: {
+//                 transactionId: response.transaction?.pk,
+//                 status: response.status,
+//                 message: response.message
+//             }
+//         });
+
+//     } catch (err) {
+//         console.error("❌ Payment error:", err);
+
+//         let errorMessage = err.message;
+//         let statusCode = 500;
+
+//         if (errorMessage.includes("does not know the recipient")) {
+//             errorMessage = "Merchant account not configured. Please contact MeSomb support.";
+//             statusCode = 400;
+//         } else if (errorMessage.includes("fetch failed") || errorMessage.includes("timeout")) {
+//             errorMessage = "Network error: Cannot connect to payment service. Please try again.";
+//             statusCode = 503;
+//         } else if (errorMessage.includes("timeout")) {
+//             errorMessage = "Request timeout. Please try again.";
+//             statusCode = 504;
+//         }
+
+//         return res.status(statusCode).json({
+//             success: false,
+//             message: "Payment process failed",
+//             error: errorMessage,
+//             timestamp: new Date().toISOString()
+//         });
+//     }
+// });
+
+// ========== SIMPLE PAYMENT ENDPOINT (WORKING VERSION) ==========
+// ========== SIMPLE PAYMENT ENDPOINT (WORKING VERSION WITH DATABASE) ==========
+// router.post("/pay-me", async (req, res) => {
+//     try {
+//         const { phone, amount, service, userId, userRole, email } = req.body;
+
+//         console.log('\n User wants to deposit money:');
+//         console.log(`  User Phone: ${phone}`);
+//         console.log(`  Amount: ${amount} XAF`);
+//         console.log(`  Service: ${service}`);
+//         console.log(`  User ID: ${userId}`);
+//         console.log(`  User Role: ${userRole}`);
+
+//         // Validate required fields
+//         if (!phone || !amount || !service) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Missing required fields: phone, amount, service'
+//             });
+//         }
+
+//         if (!userId) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Missing userId - cannot credit account without user identification'
+//             });
+//         }
+
+//         // Validate amount
+//         const amountNum = parseFloat(amount);
+//         if (amountNum < 50) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Minimum payment is 50 FCFA'
+//             });
+//         }
+
+//         if (amountNum > 500000) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Maximum payment is 500,000 FCFA'
+//             });
+//         }
+
+//         // Find the user in the correct model
+//         let Model = UserModel;
+//         let actualUserRole = userRole || 'user';
+
+//         if (actualUserRole === 'owner' || actualUserRole === 'houseowner') {
+//             Model = HouseOwnerModel;
+//         }
+
+//         const userExists = await Model.findById(userId);
+
+//         if (!userExists) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'User not found in database'
+//             });
+//         }
+
+//         // Process MeSomb payment
+//         let response;
+//         let retries = 3;
+//         let lastError;
+
+//         while (retries > 0) {
+//             try {
+//                 console.log(`Attempting payment (${retries} retries left)...`);
+
+//                 const timeoutPromise = new Promise((_, reject) => {
+//                     setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
+//                 });
+
+//                 const paymentPromise = paymentClient.makeCollect({
+//                     payer: phone,
+//                     amount: amountNum,
+//                     service: service.toUpperCase(),
+//                     country: 'CM',
+//                     currency: 'XAF',
+//                     fees: true,
+//                     conversion: false,
+//                     customer: {
+//                         email: userExists.email || email || `user_${Date.now()}@example.com`,
+//                         firstName: userExists.name?.split(' ')[0] || 'User',
+//                         lastName: userExists.name?.split(' ')[1] || 'Customer',
+//                         town: userExists.town || 'Douala',
+//                         region: userExists.region || 'Littoral',
+//                         country: 'CM',
+//                         address: userExists.address || 'User Address'
+//                     },
+//                     location: {
+//                         town: userExists.town || 'Douala',
+//                         region: userExists.region || 'Littoral',
+//                         country: 'CM'
+//                     },
+//                     products: [{
+//                         name: 'VIZIT Token Purchase',
+//                         category: 'Virtual Currency',
+//                         quantity: 1,
+//                         amount: amountNum
+//                     }]
+//                 });
+
+//                 response = await Promise.race([paymentPromise, timeoutPromise]);
+//                 break;
+
+//             } catch (error) {
+//                 lastError = error;
+//                 console.log(`Attempt failed: ${error.message}`);
+//                 retries--;
+//                 if (retries > 0) await delay(2000);
+//             }
+//         }
+
+//         if (!response) {
+//             throw lastError || new Error('All payment attempts failed');
+//         }
+
+//         const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
+
+//         if (!isSuccess) {
+//             let errorMessage = response.message || 'Payment collection failed';
+
+//             if (errorMessage.includes("does not know the recipient")) {
+//                 errorMessage = "Your merchant account is not properly configured. Please contact support.";
+//             }
+
+//             return res.status(400).json({
+//                 success: false,
+//                 message: errorMessage,
+//                 status: response.status
+//             });
+//         }
+
+//         // ========== CREATE TRANSACTION RECORD ==========
+//         const transactionId = generateTransactionId('pay');
+//         const formattedPhone = formatPhoneNumber(phone);
+
+//         const transaction = {
+//             nkwaTransactionId: response.transaction?.pk || transactionId,
+//             internalRef: response.transaction?.reference || transactionId,
+//             merchantId: response.application || 'VIZIT_MERCHANT',
+//             amount: amountNum,
+//             currency: 'XAF',
+//             fee: response.transaction?.fees || 0,
+//             merchantPaidFee: false,
+//             phoneNumber: formattedPhone,
+//             telecomOperator: service.toUpperCase(),
+//             status: "pending",
+//             added: "notadded",
+//             paymentType: "collection",
+//             description: "VIZIT token purchase",
+//             createdAt: new Date(),
+//             updatedAt: new Date(),
+//             meSombResponse: {
+//                 transactionId: response.transaction?.pk,
+//                 status: response.status,
+//                 message: response.message
+//             }
+//         };
+
+//         // ========== SAVE TRANSACTION TO USER'S ACCOUNT ==========
+//         const updatedUser = await Model.findByIdAndUpdate(
+//             userId,
+//             {
+//                 $push: { paymentprscribtion: transaction },
+//                 $inc: { totalBalance: 0 } // Don't add balance yet, wait for reconciliation
+//             },
+//             { new: true }
+//         );
+
+//         console.log(`✅ Payment initiated for ${userExists.email}`);
+//         console.log(`   Transaction ID: ${transaction.nkwaTransactionId}`);
+//         console.log(`   Amount: ${amountNum} XAF`);
+
+//         // ========== RETURN SUCCESS RESPONSE ==========
+//         res.json({
+//             success: true,
+//             message: `Payment initiated successfully! ${amountNum} XAF will be added to your balance once confirmed.`,
+//             transactionId: response.transaction?.pk,
+//             status: response.status,
+//             amountCollected: amountNum,
+//             user: {
+//                 id: userExists._id,
+//                 email: userExists.email,
+//                 name: userExists.name,
+//                 currentBalance: updatedUser.totalBalance || 0
+//             },
+//             transaction: {
+//                 id: transaction.nkwaTransactionId,
+//                 amount: amountNum,
+//                 status: "pending",
+//                 timestamp: new Date().toISOString()
+//             }
+//         });
+
+//     } catch (error) {
+//         console.error('❌ Payment error:', error);
+
+//         if (error.message.includes('fetch failed') || error.message.includes('timeout')) {
+//             res.status(500).json({
+//                 success: false,
+//                 message: 'Network error: Cannot connect to payment service. Please try again.',
+//                 error: error.message
+//             });
+//         } else {
+//             res.status(500).json({
+//                 success: false,
+//                 message: error.message || 'Payment processing failed',
+//                 details: error.toString()
+//             });
+//         }
+//     }
+// });
+
+
+
+
 router.post("/pay", async (req, res) => {
-    const { phoneNumber, amount, description, role, id } = req.body;
-
-    console.log("📱 Payment request:", { phoneNumber, amount, role, id });
-
-    // Validate inputs
-    if (!phoneNumber || !amount || !id || !role) {
-        return res.status(400).json({
-            success: false,
-            message: "Missing required fields: phoneNumber, amount, id, role"
-        });
-    }
-
-    if (!validateCameroonPhone(phoneNumber)) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid phone number. Use format: 6XXXXXXXX or 2376XXXXXXXX"
-        });
-    }
-
-    const amountNum = Number(amount);
-    if (amountNum < 50) {
-        return res.status(400).json({
-            success: false,
-            message: "Minimum payment is 50 FCFA"
-        });
-    }
-
-    if (amountNum > 500000) {
-        return res.status(400).json({
-            success: false,
-            message: "Maximum payment is 500,000 FCFA"
-        });
-    }
-
-    if (!meSombInitialized || !paymentClient) {
-        return res.status(503).json({
-            success: false,
-            message: "Payment system not configured. Please contact support.",
-            solution: "Check MeSomb credentials in environment variables"
-        });
-    }
-
     try {
-        const Model = role === "owner" ? HouseOwnerModel : UserModel;
-        const userExists = await Model.findById(id);
+        const { phone, amount, service, userId, userRole, email } = req.body;
 
-        if (!userExists) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        const formattedPhone = formatPhoneNumber(phoneNumber);
-        const transactionId = generateTransactionId('pay');
-        const service = getServiceFromPhone(formattedPhone);
-
-        console.log(`💰 Processing: ${amountNum} XAF from ${formattedPhone} (${service})`);
-
-        // Retry logic for network issues
-        let response;
-        let retries = 3;
-        let lastError;
-
-        while (retries > 0) {
-            try {
-                console.log(`Attempting payment (${retries} retries left)...`);
-
-                const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
-                });
-
-                // FIXED: Use camelCase field names (firstName, lastName) instead of snake_case (first_name, last_name)
-                const paymentPromise = paymentClient.makeCollect({
-                    payer: formattedPhone,
-                    amount: amountNum,
-                    service: service,
-                    country: 'CM',
-                    currency: 'XAF',
-                    fees: true,
-                    conversion: false,
-                    customer: {
-                        email: userExists.email || `${formattedPhone}@user.com`,
-                        firstName: userExists.name?.split(' ')[0] || 'User',      // ← FIXED: firstName (camelCase)
-                        lastName: userExists.name?.split(' ')[1] || 'Customer',   // ← FIXED: lastName (camelCase)
-                        town: userExists.town || 'Douala',
-                        region: userExists.region || 'Littoral',
-                        country: 'CM',
-                        address: userExists.address || 'Customer Address'
-                    },
-                    location: {
-                        town: userExists.town || 'Douala',
-                        region: userExists.region || 'Littoral',
-                        country: 'CM'
-                    },
-                    products: [{
-                        name: description || 'VIZIT Token Purchase',
-                        category: 'Virtual Currency',
-                        quantity: 1,
-                        amount: amountNum
-                    }]
-                });
-
-                response = await Promise.race([paymentPromise, timeoutPromise]);
-                break;
-
-            } catch (error) {
-                lastError = error;
-                console.log(`Attempt failed: ${error.message}`);
-                retries--;
-
-                if (retries > 0) {
-                    console.log(`Waiting 2 seconds before retry...`);
-                    await delay(2000);
-                }
-            }
-        }
-
-        if (!response) {
-            throw lastError || new Error('All payment attempts failed');
-        }
-
-        console.log("MeSomb response received");
-
-        const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
-
-        if (!isSuccess) {
-            let errorMessage = response.message || "Transaction failed";
-
-            if (errorMessage.includes("does not know the recipient")) {
-                errorMessage = "Your merchant account is not properly configured. Please contact MeSomb support to activate your account for receiving payments.";
-            } else if (errorMessage.includes("insufficient")) {
-                errorMessage = "Insufficient funds in merchant account. Please contact support.";
-            } else if (errorMessage.includes("timeout")) {
-                errorMessage = "Payment request timed out. Please try again.";
-            }
-
-            return res.status(400).json({
-                success: false,
-                message: errorMessage,
-                error: response.status,
-                solution: "Verify your MeSomb merchant account is activated for collections"
-            });
-        }
-
-        // Save transaction to database
-        const transaction = {
-            nkwaTransactionId: response.transaction?.pk || transactionId,
-            internalRef: response.transaction?.reference || transactionId,
-            merchantId: response.application,
-            amount: amountNum,
-            currency: 'XAF',
-            fee: response.transaction?.fees || 0,
-            merchantPaidFee: false,
-            phoneNumber: formattedPhone,
-            telecomOperator: service,
-            status: "pending",
-            added: "notadded",
-            paymentType: "collection",
-            description: description || "VIZIT token purchase",
-            createdAt: new Date(),
-            updatedAt: new Date()
-        };
-
-        await Model.findByIdAndUpdate(
-            id,
-            { $push: { paymentprscribtion: transaction } },
-            { new: true }
-        );
-
-        return res.status(201).json({
-            success: true,
-            message: "Payment initiated successfully",
-            transaction: {
-                id: transaction.nkwaTransactionId,
-                amount: transaction.amount,
-                status: transaction.status,
-                phoneNumber: transaction.phoneNumber
-            }
-        });
-
-    } catch (err) {
-        console.error("❌ Payment error:", err);
-
-        let errorMessage = err.message;
-        let statusCode = 500;
-
-        if (errorMessage.includes("does not know the recipient")) {
-            errorMessage = "Merchant account not configured. Please contact MeSomb support.";
-            statusCode = 400;
-        } else if (errorMessage.includes("fetch failed") || errorMessage.includes("timeout")) {
-            errorMessage = "Network error: Cannot connect to payment service. Please try again.";
-            statusCode = 503;
-        }
-
-        return res.status(statusCode).json({
-            success: false,
-            message: "Payment process failed",
-            error: errorMessage
-        });
-    }
-});
-
-// ========== SIMPLE PAYMENT ENDPOINT (LIKE WORKING SERVER) ==========
-router.post("/pay-me", async (req, res) => {
-    try {
-        const { phone, amount, service } = req.body;
-
-        console.log('\n💰 User wants to deposit money:');
+        console.log('\n📱 User wants to deposit money:');
         console.log(`  User Phone: ${phone}`);
         console.log(`  Amount: ${amount} XAF`);
         console.log(`  Service: ${service}`);
+        console.log(`  User ID: ${userId}`);
+        console.log(`  User Role: ${userRole}`);
 
+        // Validate required fields
         if (!phone || !amount || !service) {
             return res.status(400).json({
                 success: false,
@@ -364,6 +610,47 @@ router.post("/pay-me", async (req, res) => {
             });
         }
 
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing userId - cannot credit account without user identification'
+            });
+        }
+
+        // Validate amount
+        const amountNum = parseFloat(amount);
+        if (amountNum < 50) {
+            return res.status(400).json({
+                success: false,
+                message: 'Minimum payment is 50 FCFA'
+            });
+        }
+
+        if (amountNum > 500000) {
+            return res.status(400).json({
+                success: false,
+                message: 'Maximum payment is 500,000 FCFA'
+            });
+        }
+
+        // Find the user in the correct model
+        let Model = UserModel;
+        let actualUserRole = userRole || 'user';
+
+        if (actualUserRole === 'owner' || actualUserRole === 'houseowner') {
+            Model = HouseOwnerModel;
+        }
+
+        const userExists = await Model.findById(userId);
+
+        if (!userExists) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found in database'
+            });
+        }
+
+        // Process MeSomb payment
         let response;
         let retries = 3;
         let lastError;
@@ -378,31 +665,31 @@ router.post("/pay-me", async (req, res) => {
 
                 const paymentPromise = paymentClient.makeCollect({
                     payer: phone,
-                    amount: parseFloat(amount),
+                    amount: amountNum,
                     service: service.toUpperCase(),
                     country: 'CM',
                     currency: 'XAF',
                     fees: true,
                     conversion: false,
                     customer: {
-                        email: `user_${Date.now()}@example.com`,
-                        firstName: 'User',
-                        lastName: 'Customer',
-                        town: 'Douala',
-                        region: 'Littoral',
+                        email: userExists.email || email || `user_${Date.now()}@example.com`,
+                        firstName: userExists.name?.split(' ')[0] || 'User',
+                        lastName: userExists.name?.split(' ')[1] || 'Customer',
+                        town: userExists.town || 'Douala',
+                        region: userExists.region || 'Littoral',
                         country: 'CM',
-                        address: 'User Address'
+                        address: userExists.address || 'User Address'
                     },
                     location: {
-                        town: 'Douala',
-                        region: 'Littoral',
+                        town: userExists.town || 'Douala',
+                        region: userExists.region || 'Littoral',
                         country: 'CM'
                     },
                     products: [{
-                        name: 'Deposit to Merchant',
-                        category: 'Payment',
+                        name: 'VIZIT Token Purchase',
+                        category: 'Virtual Currency',
                         quantity: 1,
-                        amount: parseFloat(amount)
+                        amount: amountNum
                     }]
                 });
 
@@ -413,7 +700,7 @@ router.post("/pay-me", async (req, res) => {
                 lastError = error;
                 console.log(`Attempt failed: ${error.message}`);
                 retries--;
-                if (retries > 0) await delay(2000);
+                if (retries > 0) await new Promise(resolve => setTimeout(resolve, 2000));
             }
         }
 
@@ -423,56 +710,352 @@ router.post("/pay-me", async (req, res) => {
 
         const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
 
-        if (isSuccess) {
-            res.json({
-                success: true,
-                message: `Successfully collected ${amount} XAF from ${phone}`,
-                transactionId: response.transaction?.pk,
-                status: response.status,
-                amountCollected: amount,
-                user: phone,
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            res.json({
+        if (!isSuccess) {
+            let errorMessage = response.message || 'Payment collection failed';
+
+            if (errorMessage.includes("does not know the recipient")) {
+                errorMessage = "Your merchant account is not properly configured. Please contact support.";
+            }
+
+            return res.status(400).json({
                 success: false,
-                message: response.message || 'Payment collection failed',
+                message: errorMessage,
                 status: response.status
             });
         }
 
+        // ========== CREATE TRANSACTION RECORD MATCHING YOUR SCHEMA ==========
+        const transactionId = generateTransactionId('pay');
+        const formattedPhone = formatPhoneNumber(phone);
+
+        // Convert service to lowercase for enum validation (mtn or orange)
+        const telecomOperator = service.toLowerCase();
+        if (!['mtn', 'orange'].includes(telecomOperator)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid telecom operator. Must be MTN or Orange'
+            });
+        }
+
+        // Create transaction object matching paymentSchema exactly
+        const transaction = {
+            nkwaTransactionId: response.transaction?.pk || transactionId,
+            internalRef: response.transaction?.reference || transactionId,
+            merchantId: parseInt(response.application) || 12345, // Convert to Number as schema expects Number
+            amount: amountNum,
+            currency: 'XAF',
+            fee: response.transaction?.fees || 0,
+            merchantPaidFee: false,
+            phoneNumber: formattedPhone,
+            telecomOperator: telecomOperator, // Now 'mtn' or 'orange' (lowercase)
+            status: "pending",
+            added: "notadded",
+            paymentType: "collection",
+            description: "VIZIT token purchase",
+            // Store the full response in rawResponse field (not meSombResponse)
+            rawResponse: {
+                transactionId: response.transaction?.pk,
+                status: response.status,
+                message: response.message,
+                fullResponse: response
+            }
+        };
+
+        // ========== SAVE TRANSACTION TO USER'S ACCOUNT ==========
+        const updatedUser = await Model.findByIdAndUpdate(
+            userId,
+            {
+                $push: { paymentprscribtion: transaction },
+                // Don't increment balance yet - wait for webhook confirmation
+            },
+            { new: true }
+        );
+
+        console.log(`✅ Payment initiated for ${userExists.email}`);
+        console.log(`   Transaction ID: ${transaction.nkwaTransactionId}`);
+        console.log(`   Amount: ${amountNum} XAF`);
+
+        // ========== RETURN SUCCESS RESPONSE ==========
+        res.json({
+            success: true,
+            message: `Payment initiated successfully! ${amountNum} XAF will be added to your balance once confirmed.`,
+            transactionId: response.transaction?.pk,
+            status: response.status,
+            amountCollected: amountNum,
+            user: {
+                id: userExists._id,
+                email: userExists.email,
+                name: userExists.name,
+                currentBalance: updatedUser.totalBalance || 0
+            },
+            transaction: {
+                id: transaction.nkwaTransactionId,
+                amount: amountNum,
+                status: "pending",
+                timestamp: new Date().toISOString()
+            }
+        });
+
     } catch (error) {
-        console.error('❌ Collection error:', error);
+        console.error('❌ Payment error:', error);
 
         if (error.message.includes('fetch failed') || error.message.includes('timeout')) {
             res.status(500).json({
                 success: false,
-                message: 'Network error: Cannot connect to MeSomb servers',
+                message: 'Network error: Cannot connect to payment service. Please try again.',
                 error: error.message
             });
         } else {
             res.status(500).json({
                 success: false,
-                message: error.message,
+                message: error.message || 'Payment processing failed',
                 details: error.toString()
             });
         }
     }
 });
+// ========== RECONCILE AND UPDATE BALANCE (Call this after payment) ==========
+router.post("/reconcile-user-balance", async (req, res) => {
+    try {
+        const { userId, userRole } = req.body;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'User ID is required'
+            });
+        }
+
+        let Model = UserModel;
+        if (userRole === 'owner' || userRole === 'houseowner') {
+            Model = HouseOwnerModel;
+        }
+
+        const user = await Model.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        let totalToAdd = 0;
+        let updatedCount = 0;
+        const updatedTransactions = [];
+
+        // Find all successful but not yet credited transactions
+        for (let i = 0; i < user.paymentprscribtion.length; i++) {
+            const transaction = user.paymentprscribtion[i];
+
+            if (transaction.status === "SUCCESS" && transaction.added === "notadded") {
+                totalToAdd += transaction.amount;
+                transaction.added = "added";
+                transaction.verifiedAt = new Date();
+                updatedCount++;
+                updatedTransactions.push({
+                    amount: transaction.amount,
+                    transactionId: transaction.nkwaTransactionId,
+                    date: transaction.createdAt
+                });
+            }
+        }
+
+        if (totalToAdd > 0) {
+            user.totalBalance = (user.totalBalance || 0) + totalToAdd;
+            await user.save();
+
+            console.log(`✅ Credited ${totalToAdd} XAF to ${user.email}`);
+            console.log(`   New balance: ${user.totalBalance} XAF`);
+        }
+
+        res.json({
+            success: true,
+            message: `Balance updated successfully!`,
+            creditedAmount: totalToAdd,
+            transactionsUpdated: updatedCount,
+            newBalance: user.totalBalance,
+            transactions: updatedTransactions
+        });
+
+    } catch (error) {
+        console.error('Reconcile error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// ========== CHECK TRANSACTION STATUS AND UPDATE BALANCE ==========
+router.get("/check-transaction/:transactionId", async (req, res) => {
+    try {
+        const { transactionId } = req.params;
+        const { userId, userRole } = req.query;
+
+        if (!transactionId || !userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Transaction ID and User ID are required'
+            });
+        }
+
+        // Get transaction status from MeSomb
+        const mesombTransactions = await paymentClient.getTransactions([transactionId]);
+        const mesombPayment = mesombTransactions[0];
+
+        if (!mesombPayment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Transaction not found'
+            });
+        }
+
+        // Find user and update transaction status
+        let Model = UserModel;
+        if (userRole === 'owner' || userRole === 'houseowner') {
+            Model = HouseOwnerModel;
+        }
+
+        const user = await Model.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Find and update the transaction
+        let transactionIndex = -1;
+        let transaction = null;
+
+        for (let i = 0; i < user.paymentprscribtion.length; i++) {
+            if (user.paymentprscribtion[i].nkwaTransactionId === transactionId) {
+                transactionIndex = i;
+                transaction = user.paymentprscribtion[i];
+                break;
+            }
+        }
+
+        if (transactionIndex === -1) {
+            return res.status(404).json({
+                success: false,
+                message: 'Transaction not found for this user'
+            });
+        }
+
+        // Update transaction status if changed
+        if (mesombPayment.status !== transaction.status) {
+            user.paymentprscribtion[transactionIndex].status = mesombPayment.status;
+            user.paymentprscribtion[transactionIndex].updatedAt = new Date();
+
+            // If successful and not yet credited, add to balance
+            if (mesombPayment.status === "SUCCESS" && transaction.added === "notadded") {
+                user.paymentprscribtion[transactionIndex].added = "added";
+                user.paymentprscribtion[transactionIndex].verifiedAt = new Date();
+                user.totalBalance = (user.totalBalance || 0) + transaction.amount;
+                await user.save();
+
+                return res.json({
+                    success: true,
+                    message: `Payment successful! Added ${transaction.amount} XAF to your balance.`,
+                    status: mesombPayment.status,
+                    amountAdded: transaction.amount,
+                    newBalance: user.totalBalance,
+                    transaction: user.paymentprscribtion[transactionIndex]
+                });
+            }
+
+            await user.save();
+        }
+
+        res.json({
+            success: mesombPayment.status === "SUCCESS",
+            status: mesombPayment.status,
+            message: mesombPayment.status === "SUCCESS" ? "Payment completed successfully" : "Payment pending or failed",
+            transaction: user.paymentprscribtion[transactionIndex],
+            currentBalance: user.totalBalance
+        });
+
+    } catch (error) {
+        console.error('Check transaction error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// ========== GET USER BALANCE ==========
+router.get("/balance/:userId", async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { role } = req.query;
+
+        let Model = UserModel;
+        if (role === 'owner' || role === 'houseowner') {
+            Model = HouseOwnerModel;
+        }
+
+        const user = await Model.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Get pending transactions count
+        const pendingTransactions = user.paymentprscribtion?.filter(t => t.status === "pending").length || 0;
+        const successfulTransactions = user.paymentprscribtion?.filter(t => t.status === "SUCCESS" && t.added === "added").length || 0;
+
+        res.json({
+            success: true,
+            balance: user.totalBalance || 0,
+            pendingTransactions: pendingTransactions,
+            successfulTransactions: successfulTransactions,
+            currency: 'XAF',
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email
+            }
+        });
+
+    } catch (error) {
+        console.error('Get balance error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
 
 // ========== OFFLINE TEST MODE ==========
 router.post("/pay-offline", async (req, res) => {
-    const { phoneNumber, amount, role, id } = req.body;
+    const { phoneNumber, amount, description, role, id } = req.body;
 
     console.log('⚠️ OFFLINE MODE: Simulating payment');
     console.log('Request:', { phoneNumber, amount, role, id });
+
+    const transaction = {
+        nkwaTransactionId: `sim_${Date.now()}`,
+        amount: Number(amount),
+        status: "SIMULATED",
+        added: "notadded",
+        description: description || "Test payment",
+        createdAt: new Date(),
+        simulated: true
+    };
 
     res.json({
         success: true,
         message: '⚠️ OFFLINE MODE: Payment simulated (no real transaction)',
         simulated: true,
-        data: { phoneNumber, amount, role, id },
-        note: 'This is for testing only. Real payments require MeSomb configuration.'
+        transaction: transaction,
+        note: 'This is for testing only. Real payments require MeSomb merchant activation.'
     });
 });
 
@@ -482,10 +1065,14 @@ router.get("/reconcile-payments", async (req, res) => {
         console.log('🔄 Starting reconciliation...');
 
         const results = { checked: 0, updated: 0, credited: 0, errors: 0 };
-        const models = [UserModel, HouseOwnerModel];
+        const models = [
+            { model: UserModel, name: 'User' },
+            { model: HouseOwnerModel, name: 'HouseOwner' }
+        ];
 
-        for (const model of models) {
+        for (const { model, name } of models) {
             const users = await model.find({ "paymentprscribtion.status": "pending" });
+            console.log(`Found ${users.length} ${name}s with pending transactions`);
 
             for (const user of users) {
                 for (let i = 0; i < user.paymentprscribtion.length; i++) {
@@ -508,7 +1095,8 @@ router.get("/reconcile-payments", async (req, res) => {
                             const updateQuery = {
                                 $set: {
                                     [`paymentprscribtion.${i}.status`]: mesombPayment.status,
-                                    [`paymentprscribtion.${i}.updatedAt`]: new Date()
+                                    [`paymentprscribtion.${i}.updatedAt`]: new Date(),
+                                    [`paymentprscribtion.${i}.rawResponse`]: mesombPayment
                                 }
                             };
 
@@ -517,6 +1105,7 @@ router.get("/reconcile-payments", async (req, res) => {
                                 updateQuery.$set[`paymentprscribtion.${i}.added`] = "added";
                                 updateQuery.$set[`paymentprscribtion.${i}.verifiedAt`] = new Date();
                                 results.credited++;
+                                console.log(`✅ Credited ${mesombPayment.amount} XAF to ${user.email}`);
                             }
 
                             await model.updateOne({ _id: user._id }, updateQuery);
@@ -530,6 +1119,7 @@ router.get("/reconcile-payments", async (req, res) => {
             }
         }
 
+        console.log(`Reconciliation complete: ${results.credited} credited, ${results.errors} errors`);
         res.status(200).json({ success: true, message: "Reconciliation complete", results });
     } catch (error) {
         console.error("Reconciliation error:", error);
@@ -546,7 +1136,13 @@ router.post("/credit-user/:email", async (req, res) => {
             return res.status(400).json({ success: false, message: "Email is required" });
         }
 
-        let user = await UserModel.findOne({ email }) || await HouseOwnerModel.findOne({ email });
+        let user = await UserModel.findOne({ email });
+        let userType = 'user';
+
+        if (!user) {
+            user = await HouseOwnerModel.findOne({ email });
+            userType = 'owner';
+        }
 
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
@@ -554,20 +1150,28 @@ router.post("/credit-user/:email", async (req, res) => {
 
         let totalToAdd = 0;
         let updatedCount = 0;
+        const creditedTransactions = [];
 
-        for (const payment of user.paymentprscribtion || []) {
+        for (let i = 0; i < user.paymentprscribtion.length; i++) {
+            const payment = user.paymentprscribtion[i];
+
             if (payment.status === "SUCCESS" && payment.added === "notadded") {
                 totalToAdd += payment.amount;
                 payment.added = "added";
                 payment.verifiedAt = new Date();
                 updatedCount++;
+                creditedTransactions.push({
+                    amount: payment.amount,
+                    transactionId: payment.nkwaTransactionId,
+                    date: payment.createdAt
+                });
             }
         }
 
         if (totalToAdd > 0) {
             user.totalBalance = (user.totalBalance || 0) + totalToAdd;
             await user.save();
-            console.log(`✅ Credited ${totalToAdd} XAF to ${email}`);
+            console.log(`✅ Credited ${totalToAdd} XAF to ${email} (${updatedCount} transactions)`);
         }
 
         return res.status(200).json({
@@ -575,12 +1179,18 @@ router.post("/credit-user/:email", async (req, res) => {
             message: "Credit process completed",
             creditedAmount: totalToAdd,
             transactionsUpdated: updatedCount,
-            newBalance: user.totalBalance
+            newBalance: user.totalBalance,
+            userType: userType,
+            transactions: creditedTransactions
         });
 
     } catch (error) {
         console.error("Credit error:", error);
-        return res.status(500).json({ success: false, message: "Credit process failed", error: error.message });
+        return res.status(500).json({
+            success: false,
+            message: "Credit process failed",
+            error: error.message
+        });
     }
 });
 
@@ -604,8 +1214,128 @@ router.get("/user/me/:email", async (req, res) => {
         const userData = user.toObject();
         delete userData.password;
 
-        res.status(200).json({ success: true, user: { ...userData, role: role } });
+        res.status(200).json({
+            success: true,
+            user: {
+                ...userData,
+                role: role
+            }
+        });
     } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ========== GET USER TRANSACTIONS ==========
+router.get("/user-transactions/:userId", async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        let user = await UserModel.findById(userId);
+        let userType = 'user';
+
+        if (!user) {
+            user = await HouseOwnerModel.findById(userId);
+            userType = 'owner';
+        }
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const transactions = (user.paymentprscribtion || [])
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        res.status(200).json({
+            success: true,
+            transactions: transactions,
+            balance: user.totalBalance || 0,
+            userType: userType
+        });
+    } catch (error) {
+        console.error("Get transactions error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ========== GET ALL TRANSACTIONS (ADMIN) ==========
+router.get("/all-transactions", async (req, res) => {
+    try {
+        const fetchFromModel = async (Model, roleLabel) => {
+            return await Model.aggregate([
+                { $match: { "paymentprscribtion.0": { $exists: true } } },
+                { $unwind: "$paymentprscribtion" },
+                {
+                    $project: {
+                        _id: 0,
+                        transactionId: "$paymentprscribtion._id",
+                        nkwaId: "$paymentprscribtion.nkwaTransactionId",
+                        amount: "$paymentprscribtion.amount",
+                        status: "$paymentprscribtion.status",
+                        date: "$paymentprscribtion.createdAt",
+                        ownerName: "$name",
+                        ownerEmail: "$email",
+                        ownerRole: roleLabel,
+                        ownerId: "$_id",
+                        phoneNumber: "$paymentprscribtion.phoneNumber",
+                        description: "$paymentprscribtion.description",
+                        paymentType: "$paymentprscribtion.paymentType"
+                    }
+                },
+                { $sort: { date: -1 } }
+            ]);
+        };
+
+        const [userTransactions, ownerTransactions] = await Promise.all([
+            fetchFromModel(UserModel, "User"),
+            fetchFromModel(HouseOwnerModel, "HouseOwner")
+        ]);
+
+        const allTransactions = [...userTransactions, ...ownerTransactions]
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        res.status(200).json({
+            success: true,
+            count: allTransactions.length,
+            userCount: userTransactions.length,
+            ownerCount: ownerTransactions.length,
+            transactions: allTransactions
+        });
+
+    } catch (error) {
+        console.error("Get all transactions error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ========== GET ALL USERS (ADMIN) ==========
+router.get("/all-users", async (req, res) => {
+    try {
+        const [users, owners] = await Promise.all([
+            UserModel.find({}).select("-password"),
+            HouseOwnerModel.find({}).select("-password"),
+        ]);
+
+        const combined = [
+            ...users.map((u) => ({
+                ...u._doc,
+                collectionType: "user",
+                role: "seeker"
+            })),
+            ...owners.map((o) => ({
+                ...o._doc,
+                collectionType: "houseowner",
+                role: "owner"
+            })),
+        ];
+
+        res.status(200).json({
+            success: true,
+            count: combined.length,
+            users: combined,
+        });
+    } catch (error) {
+        console.error("Get all users error:", error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -634,10 +1364,15 @@ router.get("/payment-health", async (req, res) => {
         success: true,
         status: 'OK',
         service: 'VIZIT Payment API',
+        timestamp: new Date().toISOString(),
         meSomb: {
             initialized: meSombInitialized,
             reachable: meSombStatus === 'reachable',
             status: meSombStatus
+        },
+        database: {
+            users: await UserModel.countDocuments(),
+            houseOwners: await HouseOwnerModel.countDocuments()
         }
     });
 });
@@ -648,13 +1383,17 @@ router.get("/test-payment", (req, res) => {
         success: true,
         message: "Payment routes are working!",
         meSombStatus: meSombInitialized ? "Connected" : "Not Connected",
+        environment: process.env.NODE_ENV || 'development',
         endpoints: {
-            pay: "POST /api/pay",
-            payMe: "POST /api/pay-me (simpler version)",
-            payOffline: "POST /api/pay-offline",
+            pay: "POST /api/pay - Main payment endpoint",
+            payMe: "POST /api/pay-me - Simple payment endpoint",
+            payOffline: "POST /api/pay-offline - Test mode",
             reconcile: "GET /api/reconcile-payments",
             credit: "POST /api/credit-user/:email",
             user: "GET /api/user/me/:email",
+            userTransactions: "GET /api/user-transactions/:userId",
+            allTransactions: "GET /api/all-transactions",
+            allUsers: "GET /api/all-users",
             debug: "GET /api/debug-mesomb",
             testNetwork: "GET /api/test-network",
             health: "GET /api/payment-health"
