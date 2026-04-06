@@ -1,13 +1,21 @@
-// paymentRoutes.js - Complete Corrected MeSomb Integration
+// paymentRoutes.js - Complete Working MeSomb Integration
 import express from "express";
 import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
 import HouseOwnerModel from "../models/HouseOwners.js";
 import { PaymentOperation } from '@hachther/mesomb';
 import crypto from 'crypto';
+import https from 'https';
 
 dotenv.config();
 const router = express.Router();
+
+// ========== HTTPS AGENT FOR BETTER NETWORK HANDLING ==========
+const agent = new https.Agent({
+    keepAlive: true,
+    timeout: 30000,
+    rejectUnauthorized: true
+});
 
 // ========== ME SOMB CONFIGURATION WITH ERROR HANDLING ==========
 let paymentClient = null;
@@ -28,6 +36,7 @@ try {
         console.log('✅ MeSomb payment client initialized');
     } else {
         console.error('❌ MeSomb credentials missing');
+        console.error('Required: MESOMB_APPLICATION_KEY, MESOMB_ACCESS_KEY, MESOMB_SECRET_KEY');
     }
 } catch (error) {
     console.error('❌ MeSomb init error:', error.message);
@@ -60,6 +69,11 @@ function getServiceFromPhone(phoneNumber) {
         return 'AIRTEL';
     }
     return 'MTN';
+}
+
+// Helper function for delay
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // ========== DEBUG ENDPOINT - CHECK ME SOMB STATUS ==========
@@ -95,7 +109,40 @@ router.get("/debug-mesomb", async (req, res) => {
     }
 });
 
-// ========== PAYMENT ENDPOINT (COLLECT MONEY FROM USER) ==========
+// ========== NETWORK TEST ENDPOINT ==========
+router.get("/test-network", async (req, res) => {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const response = await fetch('https://mesomb.hachther.com', {
+            signal: controller.signal,
+            agent: agent
+        });
+
+        clearTimeout(timeoutId);
+
+        res.json({
+            success: true,
+            message: 'Network connection to MeSomb is working',
+            status: response.status
+        });
+    } catch (error) {
+        res.json({
+            success: false,
+            message: 'Cannot reach MeSomb servers',
+            error: error.message,
+            solutions: [
+                'Check your internet connection',
+                'Disable VPN/Proxy',
+                'Check firewall settings',
+                'Try on a different network'
+            ]
+        });
+    }
+});
+
+// ========== PAYMENT ENDPOINT WITH RETRY LOGIC ==========
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
@@ -124,6 +171,13 @@ router.post("/pay", async (req, res) => {
         });
     }
 
+    if (amountNum > 500000) {
+        return res.status(400).json({ 
+            success: false,
+            message: "Maximum payment is 500,000 FCFA" 
+        });
+    }
+
     if (!meSombInitialized || !paymentClient) {
         return res.status(503).json({ 
             success: false,
@@ -149,47 +203,83 @@ router.post("/pay", async (req, res) => {
 
         console.log(`💰 Processing: ${amountNum} XAF from ${formattedPhone} (${service})`);
 
-        // IMPORTANT: makeCollect collects money FROM the user TO your merchant account
-        // Your merchant account must be properly configured in MeSomb dashboard
-        const response = await paymentClient.makeCollect({
-            payer: formattedPhone,  // User paying
-            amount: amountNum,
-            service: service,
-            country: 'CM',
-            currency: 'XAF',
-            fees: true,
-            conversion: false,
-            customer: {
-                email: userExists.email || `${formattedPhone}@user.com`,
-                first_name: userExists.name?.split(' ')[0] || 'User',
-                last_name: userExists.name?.split(' ')[1] || 'Customer',
-                town: userExists.town || 'Douala',
-                region: userExists.region || 'Littoral',
-                country: 'CM',
-                address: userExists.address || 'Customer Address'
-            },
-            location: {
-                town: userExists.town || 'Douala',
-                region: userExists.region || 'Littoral',
-                country: 'CM'
-            },
-            products: [{
-                name: description || 'VIZIT Token Purchase',
-                category: 'Virtual Currency',
-                quantity: 1,
-                amount: amountNum
-            }]
-        });
+        // Retry logic for network issues
+        let response;
+        let retries = 3;
+        let lastError;
+
+        while (retries > 0) {
+            try {
+                console.log(`Attempting payment (${retries} retries left)...`);
+
+                // Create a promise with timeout
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
+                });
+
+                const paymentPromise = paymentClient.makeCollect({
+                    payer: formattedPhone,
+                    amount: amountNum,
+                    service: service,
+                    country: 'CM',
+                    currency: 'XAF',
+                    fees: true,
+                    conversion: false,
+                    customer: {
+                        email: userExists.email || `${formattedPhone}@user.com`,
+                        first_name: userExists.name?.split(' ')[0] || 'User',
+                        last_name: userExists.name?.split(' ')[1] || 'Customer',
+                        town: userExists.town || 'Douala',
+                        region: userExists.region || 'Littoral',
+                        country: 'CM',
+                        address: userExists.address || 'Customer Address'
+                    },
+                    location: {
+                        town: userExists.town || 'Douala',
+                        region: userExists.region || 'Littoral',
+                        country: 'CM'
+                    },
+                    products: [{
+                        name: description || 'VIZIT Token Purchase',
+                        category: 'Virtual Currency',
+                        quantity: 1,
+                        amount: amountNum
+                    }]
+                });
+
+                response = await Promise.race([paymentPromise, timeoutPromise]);
+                break; // Success, exit retry loop
+
+            } catch (error) {
+                lastError = error;
+                console.log(`Attempt failed: ${error.message}`);
+                retries--;
+
+                if (retries > 0) {
+                    console.log(`Waiting 2 seconds before retry...`);
+                    await delay(2000);
+                }
+            }
+        }
+
+        if (!response) {
+            throw lastError || new Error('All payment attempts failed');
+        }
 
         console.log("MeSomb response received");
 
         const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
         
         if (!isSuccess) {
-            // Handle specific error about recipient
             let errorMessage = response.message || "Transaction failed";
+            
+            // Handle specific errors
             if (errorMessage.includes("does not know the recipient")) {
-                errorMessage = "Your merchant account is not properly configured. Please contact support to activate your account for receiving payments.";
+                errorMessage = "Your merchant account is not properly configured. Please contact MeSomb support to activate your account for receiving payments.";
+            } else if (errorMessage.includes("insufficient")) {
+                errorMessage = "Insufficient funds in merchant account. Please contact support.";
+            } else if (errorMessage.includes("timeout")) {
+                errorMessage = "Payment request timed out. Please try again.";
             }
             
             return res.status(400).json({
@@ -200,7 +290,7 @@ router.post("/pay", async (req, res) => {
             });
         }
 
-        // Save transaction
+        // Save transaction to database
         const transaction = {
             nkwaTransactionId: response.transaction?.pk || transactionId,
             internalRef: response.transaction?.reference || transactionId,
@@ -240,16 +330,42 @@ router.post("/pay", async (req, res) => {
         console.error("❌ Payment error:", err);
         
         let errorMessage = err.message;
+        let statusCode = 500;
+        
         if (errorMessage.includes("does not know the recipient")) {
-            errorMessage = "Merchant account not configured. Please contact support.";
+            errorMessage = "Merchant account not configured. Please contact MeSomb support.";
+            statusCode = 400;
+        } else if (errorMessage.includes("fetch failed") || errorMessage.includes("timeout")) {
+            errorMessage = "Network error: Cannot connect to payment service. Please try again.";
+            statusCode = 503;
+        } else if (errorMessage.includes("timeout")) {
+            errorMessage = "Request timeout. Please try again.";
+            statusCode = 504;
         }
         
-        return res.status(500).json({
+        return res.status(statusCode).json({
             success: false,
             message: "Payment process failed",
             error: errorMessage
         });
     }
+});
+
+// ========== OFFLINE TEST MODE ==========
+router.post("/pay-offline", async (req, res) => {
+    const { phoneNumber, amount, role, id } = req.body;
+
+    console.log('⚠️ OFFLINE MODE: Simulating payment');
+    console.log('Request:', { phoneNumber, amount, role, id });
+
+    // Simulate successful payment for testing
+    res.json({
+        success: true,
+        message: '⚠️ OFFLINE MODE: Payment simulated (no real transaction)',
+        simulated: true,
+        data: { phoneNumber, amount, role, id },
+        note: 'This is for testing only. Real payments require MeSomb configuration.'
+    });
 });
 
 // ========== RECONCILE PENDING PAYMENTS ==========
@@ -366,6 +482,7 @@ router.post("/credit-user/:email", async (req, res) => {
         if (totalToAdd > 0) {
             user.totalBalance = (user.totalBalance || 0) + totalToAdd;
             await user.save();
+            console.log(`✅ Credited ${totalToAdd} XAF to ${email}`);
         }
 
         return res.status(200).json({
@@ -453,7 +570,7 @@ router.post("/activate-verification/:email", async (req, res) => {
         if ((user.totalBalance || 0) < totalCost) {
             return res.status(400).json({
                 success: false,
-                message: "Insufficient balance"
+                message: `Insufficient balance. Need ${totalCost} XAF, have ${user.totalBalance || 0} XAF`
             });
         }
 
@@ -774,19 +891,64 @@ router.patch("/update-status/:id", async (req, res) => {
     }
 });
 
+// ========== HEALTH CHECK ==========
+router.get("/payment-health", async (req, res) => {
+    let meSombStatus = 'unknown';
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        await fetch('https://mesomb.hachther.com', {
+            signal: controller.signal,
+            method: 'HEAD',
+            agent: agent
+        });
+
+        clearTimeout(timeoutId);
+        meSombStatus = 'reachable';
+    } catch (error) {
+        meSombStatus = 'unreachable';
+    }
+
+    res.json({
+        success: true,
+        status: 'OK',
+        service: 'VIZIT Payment API',
+        meSomb: {
+            initialized: meSombInitialized,
+            reachable: meSombStatus === 'reachable',
+            status: meSombStatus
+        },
+        endpoints: {
+            pay: "POST /api/pay - Real payment",
+            offline: "POST /api/pay-offline - Test mode",
+            reconcile: "GET /api/reconcile-payments",
+            credit: "POST /api/credit-user/:email",
+            debug: "GET /api/debug-mesomb",
+            testNetwork: "GET /api/test-network"
+        }
+    });
+});
+
 // ========== TEST ENDPOINT ==========
 router.get("/test-payment", (req, res) => {
     res.json({
         success: true,
         message: "Payment routes are working!",
         meSombStatus: meSombInitialized ? "Connected" : "Not Connected",
+        environment: process.env.NODE_ENV || 'development',
         endpoints: {
             pay: "POST /api/pay",
+            payOffline: "POST /api/pay-offline",
             reconcile: "GET /api/reconcile-payments",
             credit: "POST /api/credit-user/:email",
             user: "GET /api/user/me/:email",
-            debug: "GET /api/debug-mesomb"
-        }
+            debug: "GET /api/debug-mesomb",
+            testNetwork: "GET /api/test-network",
+            health: "GET /api/payment-health"
+        },
+        timestamp: new Date().toISOString()
     });
 });
 
