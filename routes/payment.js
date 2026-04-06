@@ -144,6 +144,240 @@ router.get("/test-network", async (req, res) => {
 
 
 
+
+
+
+
+
+
+
+
+
+router.post("/pay/owner", async (req, res) => {
+    try {
+        const { phoneNumber, amount, service, userId, userRole, email } = req.body;
+
+        console.log('\n📱 User wants to deposit money:');
+        console.log(`  User Phone: ${phoneNumber}`);
+        console.log(`  Amount: ${amount} XAF`);
+        console.log(`  Service: ${service}`);
+        console.log(`  User ID: ${userId}`);
+        console.log(`  User Role: ${userRole}`);
+
+        // Validate required fields
+        if (!phoneNumber || !amount || !service) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: phoneNumber, amount, service'
+            });
+        }
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing userId - cannot credit account without user identification'
+            });
+        }
+
+        // Validate amount
+        const amountNum = parseFloat(amount);
+        if (amountNum < 50) {
+            return res.status(400).json({
+                success: false,
+                message: 'Minimum payment is 50 FCFA'
+            });
+        }
+
+        if (amountNum > 500000) {
+            return res.status(400).json({
+                success: false,
+                message: 'Maximum payment is 500,000 FCFA'
+            });
+        }
+
+        // Find the user in the correct model
+        let Model = HouseOwnerModel;
+        // let actualUserRole = userRole;
+
+        // if (actualUserRole === 'owner' || actualUserRole === 'houseowner') {
+        //     Model = HouseOwnerModel;
+        // }
+
+        const userExists = await Model.findById(userId);
+
+        if (!userExists) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found in database'
+            });
+        }
+
+        // Process MeSomb payment
+        let response;
+        let retries = 3;
+        let lastError;
+
+        while (retries > 0) {
+            try {
+                console.log(`Attempting payment (${retries} retries left)...`);
+
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
+                });
+
+                const paymentPromise = paymentClient.makeCollect({
+                    payer: phoneNumber,
+                    amount: amountNum,
+                    service: service.toUpperCase(),
+                    country: 'CM',
+                    currency: 'XAF',
+                    fees: true,
+                    conversion: false,
+                    customer: {
+                        email: userExists.email || email || `user_${Date.now()}@example.com`,
+                        firstName: userExists.name?.split(' ')[0] || 'User',
+                        lastName: userExists.name?.split(' ')[1] || 'Customer',
+                        town: userExists.town || 'Douala',
+                        region: userExists.region || 'Littoral',
+                        country: 'CM',
+                        address: userExists.address || 'User Address'
+                    },
+                    location: {
+                        town: userExists.town || 'Douala',
+                        region: userExists.region || 'Littoral',
+                        country: 'CM'
+                    },
+                    products: [{
+                        name: 'VIZIT Token Purchase',
+                        category: 'Virtual Currency',
+                        quantity: 1,
+                        amount: amountNum
+                    }]
+                });
+
+                response = await Promise.race([paymentPromise, timeoutPromise]);
+                break;
+
+            } catch (error) {
+                lastError = error;
+                console.log(`Attempt failed: ${error.message}`);
+                retries--;
+                if (retries > 0) await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+
+        if (!response) {
+            throw lastError || new Error('All payment attempts failed');
+        }
+
+        const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
+
+        if (!isSuccess) {
+            let errorMessage = response.message || 'Payment collection failed';
+
+            if (errorMessage.includes("does not know the recipient")) {
+                errorMessage = "Your merchant account is not properly configured. Please contact support.";
+            }
+
+            return res.status(400).json({
+                success: false,
+                message: errorMessage,
+                status: response.status
+            });
+        }
+
+        // ========== CREATE TRANSACTION RECORD MATCHING YOUR SCHEMA ==========
+        const transactionId = generateTransactionId('pay');
+        const formattedPhone = formatPhoneNumber(phoneNumber);
+
+        // Convert service to lowercase for enum validation (mtn or orange)
+        const telecomOperator = service.toLowerCase();
+        if (!['mtn', 'orange'].includes(telecomOperator)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid telecom operator. Must be MTN or Orange'
+            });
+        }
+
+        // Create transaction object matching paymentSchema exactly
+        const transaction = {
+            nkwaTransactionId: response.transaction?.pk || transactionId,
+            internalRef: response.transaction?.reference || transactionId,
+            merchantId: parseInt(response.application) || 12345, // Convert to Number as schema expects Number
+            amount: amountNum,
+            currency: 'XAF',
+            fee: response.transaction?.fees || 0,
+            merchantPaidFee: false,
+            phoneNumber: formattedPhone,
+            telecomOperator: telecomOperator, // Now 'mtn' or 'orange' (lowercase)
+            status: "pending",
+            added: "notadded",
+            paymentType: "collection",
+            description: "VIZIT token purchase",
+            // Store the full response in rawResponse field (not meSombResponse)
+            rawResponse: {
+                transactionId: response.transaction?.pk,
+                status: response.status,
+                message: response.message,
+                fullResponse: response
+            }
+        };
+
+        // ========== SAVE TRANSACTION TO USER'S ACCOUNT ==========
+        const updatedUser = await Model.findByIdAndUpdate(
+            userId,
+            {
+                $push: { paymentprscribtion: transaction },
+                // Don't increment balance yet - wait for webhook confirmation
+            },
+            { new: true }
+        );
+
+        console.log(`✅ Payment initiated for ${userExists.email}`);
+        console.log(`   Transaction ID: ${transaction.nkwaTransactionId}`);
+        console.log(`   Amount: ${amountNum} XAF`);
+
+        // ========== RETURN SUCCESS RESPONSE ==========
+        res.json({
+            success: true,
+            message: `Payment initiated successfully! ${amountNum} XAF will be added to your balance once confirmed.`,
+            transactionId: response.transaction?.pk,
+            status: response.status,
+            amountCollected: amountNum,
+            user: {
+                id: userExists._id,
+                email: userExists.email,
+                name: userExists.name,
+                currentBalance: updatedUser.totalBalance || 0
+            },
+            transaction: {
+                id: transaction.nkwaTransactionId,
+                amount: amountNum,
+                status: "pending",
+                timestamp: new Date().toISOString()
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Payment error:', error);
+
+        if (error.message.includes('fetch failed') || error.message.includes('timeout')) {
+            res.status(500).json({
+                success: false,
+                message: 'Network error: Cannot connect to payment service. Please try again.',
+                error: error.message
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: error.message || 'Payment processing failed',
+                details: error.toString()
+            });
+        }
+    }
+});
+
+
 // ========== SIMPLE PAYMENT ENDPOINT (WORKING VERSION) ==========
 // ========== SIMPLE PAYMENT ENDPOINT (WORKING VERSION WITH DATABASE) ==========
 // router.post("/pay-me", async (req, res) => {
@@ -363,6 +597,8 @@ router.get("/test-network", async (req, res) => {
 
 
 
+
+
 router.post("/pay", async (req, res) => {
     try {
         const { phoneNumber, amount, service, userId, userRole, email } = req.body;
@@ -407,7 +643,7 @@ router.post("/pay", async (req, res) => {
 
         // Find the user in the correct model
         let Model = UserModel;
-        let actualUserRole = userRole || 'user';
+        let actualUserRole = userRole;
 
         if (actualUserRole === 'owner' || actualUserRole === 'houseowner') {
             Model = HouseOwnerModel;
@@ -586,6 +822,9 @@ router.post("/pay", async (req, res) => {
         }
     }
 });
+
+
+
 // ========== RECONCILE AND UPDATE BALANCE (Call this after payment) ==========
 router.post("/reconcile-user-balance", async (req, res) => {
     try {
