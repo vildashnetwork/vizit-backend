@@ -1,108 +1,33 @@
+// paymentRoutes.js - Refactored from NKWA to MeSomb
 import express from "express";
-import axios from "axios";
 import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
 import HouseOwnerModel from "../models/HouseOwners.js";
-import { Pay } from "@nkwa-pay/sdk";
+import { PaymentOperation } from '@hachther/mesomb';
+import crypto from 'crypto';
 
 dotenv.config();
 const router = express.Router();
 
-const API_KEY = process.env.API_KEY;
-const BASE_URL = process.env.NKWA_BASE_URL; // https://api.pay.staging.mynkwa.com
+// ========== ME SOMB CONFIGURATION ==========
+const paymentClient = new PaymentOperation({
+    applicationKey: process.env.MESOMB_APPLICATION_KEY,
+    accessKey: process.env.MESOMB_ACCESS_KEY,
+    secretKey: process.env.MESOMB_SECRET_KEY,
+    language: 'en'
+});
 
+// Helper function to generate transaction ID
+function generateTransactionId(prefix = 'txn') {
+    return `${prefix}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+}
 
+// Helper function to validate Cameroon phone number
+function validateCameroonPhone(phoneNumber) {
+    return /^2376\d{8}$/.test(phoneNumber);
+}
 
-
-// router.post("/pay", async (req, res) => {
-//     const { phoneNumber, amount, description, role, id } = req.body;
-
-//     if (!phoneNumber || !amount || !id || !role) {
-//         return res.status(400).json({ message: "Missing required fields" });
-//     }
-
-//     if (!/^2376\d{8}$/.test(phoneNumber)) {
-//         return res.status(400).json({ message: "Invalid Cameroon phone number" });
-//     }
-
-//     if (Number(amount) < 50) {
-//         return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
-//     }
-
-//     try {
-//         const Model = role === "owner" ? HouseOwnerModel : UserModel;
-
-//         // 🔹 Call NKWA FIRST
-//         const response = await axios.post(
-//             `${BASE_URL}/collect`,
-//             {
-//                 amount: Number(amount),
-//                 phoneNumber,
-//                 description: description || "collection"
-//             },
-//             {
-//                 headers: {
-//                     "X-API-Key": API_KEY,
-//                     "Content-Type": "application/json"
-//                 }
-//             }
-//         );
-
-//         const nkwaData = response.data;
-
-//         // 🚨 Extra safety check
-//         if (!nkwaData?.id) {
-//             return res.status(500).json({
-//                 message: "NKWA did not return transaction ID"
-//             });
-//         }
-
-//         const transaction = {
-//             nkwaTransactionId: nkwaData.id,
-//             internalRef: nkwaData.internalRef,
-//             merchantId: nkwaData.merchantId,
-//             amount: nkwaData.amount,
-//             currency: nkwaData.currency,
-//             fee: nkwaData.fee,
-//             merchantPaidFee: nkwaData.merchantPaidFee,
-//             phoneNumber: nkwaData.phoneNumber,
-//             telecomOperator: nkwaData.telecomOperator,
-//             status: nkwaData.status || "pending",
-//             paymentType: nkwaData.paymentType,
-//             description: nkwaData.description
-//         };
-
-//         await Model.findByIdAndUpdate(
-//             id,
-//             { $push: { paymentprscribtion: transaction } },
-//             { new: true }
-//         );
-
-//         return res.status(201).json({
-//             message: "Payment initiated successfully",
-//             transaction
-//         });
-
-//     } catch (err) {
-//         console.error("Payment process failed:", err.response?.data || err.message);
-
-//         return res.status(500).json({
-//             message: "Payment process failed",
-//             error: err.response?.data || err.message
-//         });
-//     }
-// });
-
-
-
-
-
-
-
-
-
-
-
+// ========== COLLECT PAYMENT (User pays you) ==========
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
@@ -110,7 +35,7 @@ router.post("/pay", async (req, res) => {
     if (!phoneNumber || !amount || !id || !role)
         return res.status(400).json({ message: "Missing required fields" });
 
-    if (!/^2376\d{8}$/.test(phoneNumber))
+    if (!validateCameroonPhone(phoneNumber))
         return res.status(400).json({ message: "Invalid phone number. Use format: 2376XXXXXXXX" });
 
     if (Number(amount) < 50)
@@ -119,54 +44,82 @@ router.post("/pay", async (req, res) => {
     try {
         const Model = role === "owner" ? HouseOwnerModel : UserModel;
 
-        // ── Verify user exists before calling NKWA ──
+        // ── Verify user exists before calling MeSomb ──
         const userExists = await Model.findById(id);
         if (!userExists)
             return res.status(404).json({ message: "User not found" });
 
-        // ── Log what we're sending so you can debug ──
-        console.log("→ NKWA collect request:", {
-            url: `${process.env.NKWA_BASE_URL}/collect`,
-            apiKeyPreview: process.env.API_KEY?.slice(0, 10) + "...",
-            body: { amount: Number(amount), phoneNumber }
+        // Remove '237' prefix if present (MeSomb expects just the number without country code)
+        let payerPhone = phoneNumber;
+        if (payerPhone.startsWith('237')) {
+            payerPhone = payerPhone.substring(3);
+        }
+
+        console.log("→ MeSomb collect request:", {
+            amount: Number(amount),
+            payer: payerPhone,
+            service: determineService(payerPhone)
         });
 
-        // ── Call NKWA — only send amount + phoneNumber (per spec) ──
-        const response = await axios.post(
-            `${process.env.NKWA_BASE_URL}/collect`,
-            {
-                amount: Number(amount),
-                phoneNumber: phoneNumber.trim(),
-                // description is NOT in the official spec, removed
+        // ── Call MeSomb makeCollect ──
+        const response = await paymentClient.makeCollect({
+            payer: payerPhone,
+            amount: Number(amount),
+            service: determineService(payerPhone),
+            country: 'CM',
+            currency: 'XAF',
+            fees: true,
+            conversion: false,
+            customer: {
+                email: userExists.email || `${id}@user.com`,
+                firstName: userExists.name?.split(' ')[0] || 'User',
+                lastName: userExists.name?.split(' ')[1] || 'Customer',
+                town: 'Douala',
+                region: 'Littoral',
+                country: 'CM',
+                address: 'Customer Address'
             },
-            {
-                headers: {
-                    "X-API-Key": process.env.API_KEY,   // exact casing from NKWA docs
-                    "Content-Type": "application/json"
-                },
-                timeout: 15000  // 15s timeout — NKWA can be slow
-            }
-        );
+            location: {
+                town: 'Douala',
+                region: 'Littoral',
+                country: 'CM'
+            },
+            products: [{
+                name: description || 'Payment Collection',
+                category: 'Service',
+                quantity: 1,
+                amount: Number(amount)
+            }]
+        });
 
-        const nkwaData = response.data;
-        console.log("← NKWA response:", nkwaData);
+        console.log("← MeSomb response:", response);
 
-        if (!nkwaData?.id)
-            return res.status(500).json({ message: "NKWA did not return a transaction ID" });
+        const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
 
-        // ── Save transaction ──
+        if (!isSuccess) {
+            return res.status(500).json({
+                message: "MeSomb did not return a successful transaction",
+                error: response.message
+            });
+        }
+
+        // ── Save transaction with same structure as NKWA ──
         const transaction = {
-            nkwaTransactionId: nkwaData.id,
-            amount: nkwaData.amount,
-            currency: nkwaData.currency,
-            fee: nkwaData.fee,
-            phoneNumber: nkwaData.phoneNumber,
-            telecomOperator: nkwaData.telecomOperator,
-            status: nkwaData.status || "pending",
-            added: "notadded",
-            paymentType: nkwaData.paymentType,
+            nkwaTransactionId: response.transaction?.pk || generateTransactionId('mesomb'), // Keep field name for compatibility
+            internalRef: response.transaction?.reference || generateTransactionId('ref'),
+            merchantId: process.env.MESOMB_APPLICATION_KEY?.substring(0, 20),
+            amount: response.transaction?.amount || Number(amount),
+            currency: response.transaction?.currency || 'XAF',
+            fee: response.transaction?.fees || 0,
+            merchantPaidFee: false,
+            phoneNumber: phoneNumber,
+            telecomOperator: determineService(payerPhone),
+            status: response.status || "pending",
+            paymentType: "collection",
             description: description || "",
-            createdAt: new Date()
+            added: "notadded",
+            createdAt: new Date(),
+            mesombResponse: response // Store full response for debugging
         };
 
         await Model.findByIdAndUpdate(
@@ -175,137 +128,38 @@ router.post("/pay", async (req, res) => {
             { new: true }
         );
 
-        return res.status(201).json({ message: "Payment initiated", transaction });
+        return res.status(201).json({
+            message: "Payment initiated successfully",
+            transaction
+        });
 
     } catch (err) {
-        // ── Log the REAL error so you can see exactly what NKWA says ──
-        const nkwaError = err.response?.data;
-        const httpStatus = err.response?.status;
-
-        console.error("✗ NKWA /collect failed:", {
-            httpStatus,
-            nkwaError,
-            rawMessage: err.message
+        console.error("✗ MeSomb /collect failed:", {
+            httpStatus: err.response?.status,
+            error: err.message
         });
 
         return res.status(500).json({
             message: "Payment process failed",
-            nkwaStatus: httpStatus,
-            nkwaError: nkwaError     // send this to frontend so YOU can see it
+            error: err.message
         });
     }
 });
 
+// Helper to determine service provider based on phone number prefix
+function determineService(phoneNumber) {
+    const phone = phoneNumber.toString();
+    if (phone.startsWith('6') || phone.startsWith('65') || phone.startsWith('67')) {
+        return 'MTN';
+    } else if (phone.startsWith('69')) {
+        return 'ORANGE';
+    } else if (phone.startsWith('68')) {
+        return 'AIRTEL';
+    }
+    return 'MTN'; // Default
+}
 
-
-
-
-
-
-
-
-
-
-/* =========================================================
-   RECONCILE ALL PENDING PAYMENTS
-========================================================= */
-// router.get("/reconcile-payments", async (req, res) => {
-//     try {
-//         const results = {
-//             checked: 0,
-//             updated: 0,
-//             credited: 0,
-//             errors: 0
-//         };
-
-//         const models = [
-//             { model: UserModel, name: "User" },
-//             { model: HouseOwnerModel, name: "HouseOwner" }
-//         ];
-
-//         for (const { model } of models) {
-//             // Find users that have at least one pending transaction
-//             const users = await model.find({
-//                 "paymentprscribtion.status": "pending"
-//             });
-
-//             for (const user of users) {
-//                 // Iterate payments safely
-//                 for (const transaction of user.paymentprscribtion || []) {
-//                     if (transaction.status !== "pending") continue;
-
-//                     results.checked++;
-
-//                     try {
-//                         // Fetch latest status from NKWA
-//                         const response = await axios.get(
-//                             `${BASE_URL}/payments/${transaction.nkwaTransactionId}`,
-//                             { headers: { "X-API-Key": API_KEY } }
-//                         );
-
-//                         const nkwaPayment = response.data;
-// console.log(nkwaPayment)
-//                         // Update only if status changed
-//                         if (nkwaPayment.status !== transaction.status) {
-
-//                             const updateQuery = {
-//                                 $set: {
-//                                     "paymentprscribtion.$.status": nkwaPayment.status,
-//                                     "paymentprscribtion.$.updatedAt": new Date(),
-//                                     "paymentprscribtion.$.rawResponse": nkwaPayment
-//                                 }
-//                             };
-
-//                             // Credit balance if success and not already credited
-//                             if (nkwaPayment.status === "success") {
-//                                 updateQuery.$inc = { totalBalance: nkwaPayment.amount };
-//                                 results.credited++;
-//                             }
-
-//                             await model.updateOne(
-//                                 {
-//                                     _id: user._id,
-//                                     "paymentprscribtion._id": transaction._id
-//                                 },
-//                                 updateQuery
-//                             );
-
-//                             results.updated++;
-//                         }
-
-//                     } catch (err) {
-//                         console.error(
-//                             `Failed to verify transaction ${transaction.nkwaTransactionId}`,
-//                             err.response?.data || err.message
-//                         );
-//                         results.errors++;
-//                     }
-//                 }
-//             }
-//         }
-
-//         return res.status(200).json({
-//             message: "Reconciliation complete",
-//             results
-//         });
-
-//     } catch (error) {
-//         console.error("Reconciliation error:", error.message);
-//         return res.status(500).json({
-//             message: "Reconciliation failed",
-//             error: error.message
-//         });
-//     }
-// });
-
-
-
-
-
-
-
-
-
+// ========== RECONCILE ALL PENDING PAYMENTS ==========
 router.get("/reconcile-payments", async (req, res) => {
     try {
         const results = { checked: 0, updated: 0, credited: 0, errors: 0 };
@@ -321,26 +175,22 @@ router.get("/reconcile-payments", async (req, res) => {
                     results.checked++;
 
                     try {
-                        const response = await axios.get(
-                            `${process.env.NKWA_BASE_URL}/payments/${transaction.nkwaTransactionId}`,
-                            { headers: { "X-API-Key": process.env.API_KEY } }
-                        );
+                        // Get transaction status from MeSomb
+                        const mesombStatus = await paymentClient.getTransactions([transaction.nkwaTransactionId]);
+                        const paymentStatus = mesombStatus[0];
 
-                        const nkwaPayment = response.data;
-
-                        if (nkwaPayment.status !== transaction.status) {
+                        if (paymentStatus && paymentStatus.status !== transaction.status) {
                             const updateQuery = {
                                 $set: {
-                                    "paymentprscribtion.$.status": nkwaPayment.status,
+                                    "paymentprscribtion.$.status": paymentStatus.status,
                                     "paymentprscribtion.$.updatedAt": new Date(),
-                                    "paymentprscribtion.$.rawResponse": nkwaPayment
+                                    "paymentprscribtion.$.rawResponse": paymentStatus
                                 }
                             };
 
                             // ONLY credit if it's a new success AND hasn't been added yet
-                            if (nkwaPayment.status === "success" && transaction.added === "notadded") {
-                                updateQuery.$inc = { totalBalance: nkwaPayment.amount };
-                                // CRITICAL: Mark as added so Credit-User doesn't double count it
+                            if (paymentStatus.status === "SUCCESS" && transaction.added === "notadded") {
+                                updateQuery.$inc = { totalBalance: paymentStatus.amount || transaction.amount };
                                 updateQuery.$set["paymentprscribtion.$.added"] = "added";
                                 updateQuery.$set["paymentprscribtion.$.verifiedAt"] = new Date();
                                 results.credited++;
@@ -353,6 +203,7 @@ router.get("/reconcile-payments", async (req, res) => {
                             results.updated++;
                         }
                     } catch (err) {
+                        console.error(`Failed to verify transaction ${transaction.nkwaTransactionId}:`, err.message);
                         results.errors++;
                     }
                 }
@@ -364,63 +215,33 @@ router.get("/reconcile-payments", async (req, res) => {
     }
 });
 
-
-
-
-
-
-/* =========================================================
-   FETCH ALL TRANSACTIONS FROM NKWA
-========================================================= */
-router.get("/nkwa/all-transactions", async (req, res) => {
+// ========== FETCH ALL TRANSACTIONS FROM MESOMB ==========
+router.get("/mesomb/all-transactions", async (req, res) => {
     try {
         const { page = 1, limit = 50 } = req.query;
 
-        if (!process.env.API_KEY || !process.env.NKWA_BASE_URL) {
-            return res.status(500).json({
-                message: "NKWA environment variables not configured"
-            });
-        }
+        // Get application status and recent transactions
+        const status = await paymentClient.getStatus();
 
-        const response = await axios.get(
-            `${process.env.NKWA_BASE_URL}/payments`,
-            {
-                params: {
-                    page: Number(page),
-                    limit: Number(limit)
-                },
-                headers: {
-                    "X-API-Key": process.env.API_KEY
-                }
-            }
-        );
-
+        // Note: MeSomb doesn't have a direct "get all transactions" endpoint
+        // You need to query by specific IDs or use webhooks
+        // This returns application status instead
         return res.status(200).json({
-            message: "Transactions fetched successfully",
-            count: response.data?.data?.length || 0,
-            data: response.data
+            message: "Application status fetched",
+            data: status,
+            note: "For transaction history, please check your MeSomb dashboard or implement webhooks"
         });
 
     } catch (error) {
-        console.error(
-            "Fetch NKWA transactions error:",
-            error.response?.data || error.message
-        );
-
+        console.error("Fetch MeSomb transactions error:", error.message);
         return res.status(500).json({
-            message: "Failed to fetch NKWA transactions",
-            error: error.response?.data || error.message
+            message: "Failed to fetch MeSomb data",
+            error: error.message
         });
     }
 });
 
-
-
-
-
-/* =========================================================
-   CREDIT SUCCESS PAYMENTS PER USER (BY EMAIL)
-========================================================= */
+// ========== CREDIT SUCCESS PAYMENTS PER USER (BY EMAIL) ==========
 router.post("/credit-user/:email", async (req, res) => {
     try {
         const { email } = req.params;
@@ -430,9 +251,7 @@ router.post("/credit-user/:email", async (req, res) => {
         }
 
         // Check both models
-        let user =
-            await UserModel.findOne({ email }) ||
-            await HouseOwnerModel.findOne({ email });
+        let user = await UserModel.findOne({ email }) || await HouseOwnerModel.findOne({ email });
 
         if (!user) {
             return res.status(404).json({ message: "User not found" });
@@ -443,16 +262,10 @@ router.post("/credit-user/:email", async (req, res) => {
 
         // Iterate payments safely
         for (const payment of user.paymentprscribtion || []) {
-
-            if (
-                payment.status === "success" &&
-                payment.added === "notadded"
-            ) {
+            if (payment.status === "SUCCESS" && payment.added === "notadded") {
                 totalToAdd += payment.amount;
-
                 payment.added = "added";
                 payment.verifiedAt = new Date();
-
                 updatedCount++;
             }
         }
@@ -472,7 +285,6 @@ router.post("/credit-user/:email", async (req, res) => {
 
     } catch (error) {
         console.error("Credit error:", error.message);
-
         return res.status(500).json({
             message: "Credit process failed",
             error: error.message
@@ -480,22 +292,7 @@ router.post("/credit-user/:email", async (req, res) => {
     }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// ========== ACTIVATE VERIFICATION FOR HOUSE OWNERS ==========
 router.post("/activate-verification/:email", async (req, res) => {
     try {
         const { months } = req.body;
@@ -507,7 +304,6 @@ router.post("/activate-verification/:email", async (req, res) => {
 
         const baseFee = 5000;
         const monthlyFee = 400;
-
         const totalCost = baseFee + (months * monthlyFee);
 
         const user = await HouseOwnerModel.findOne({ email });
@@ -548,28 +344,11 @@ router.post("/activate-verification/:email", async (req, res) => {
     }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// ========== SUBSCRIBE TO VIEW PROPERTIES ==========
 router.post("/subscribe-to-view", async (req, res) => {
-    // Now expecting 'months' from the frontend (e.g., 1, 3, 6)
     const { userId, months } = req.body;
-
-    const PRICE_PER_MONTH = 50; // Cost for 1 month
-    const numMonths = parseInt(months) || 1; // Default to 1 month if not provided
+    const PRICE_PER_MONTH = 50;
+    const numMonths = parseInt(months) || 1;
     const totalCost = PRICE_PER_MONTH * numMonths;
 
     try {
@@ -579,20 +358,14 @@ router.post("/subscribe-to-view", async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // 1. Check if user has enough balance
         if (user.totalBalance < totalCost) {
             return res.status(400).json({
                 message: `Insufficient balance. You need ${totalCost} XAF for ${numMonths} month(s).`
             });
         }
 
-        // 2. Logic for Date Calculation
         const now = new Date();
-        let newStartDate = now;
         let currentExpiry = user.paytoviewenddate;
-
-        // Determine the base date to add months to
-        // If they already have an active subscription, we add to the current end date
         let baseDate = (user.haspay && currentExpiry && currentExpiry > now)
             ? new Date(currentExpiry)
             : now;
@@ -600,19 +373,19 @@ router.post("/subscribe-to-view", async (req, res) => {
         const newEndDate = new Date(baseDate);
         newEndDate.setMonth(newEndDate.getMonth() + numMonths);
 
-        // 3. Update User Data
         user.totalBalance -= totalCost;
         user.haspay = true;
-        user.paytoviewdetailstartdate = now; // Mark the last time they made a payment
+        user.paytoviewdetailstartdate = now;
         user.paytoviewenddate = newEndDate;
 
-        // Log the transaction
         user.paymentprscribtion.push({
             amount: totalCost,
-            status: "success",
+            status: "SUCCESS",
             description: `Purchased ${numMonths} month(s) view access`,
             paymentType: "disbursement",
-            verifiedAt: now
+            verifiedAt: now,
+            added: "added",
+            nkwaTransactionId: generateTransactionId('sub') // Keep field name
         });
 
         await user.save();
@@ -629,85 +402,84 @@ router.post("/subscribe-to-view", async (req, res) => {
     }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-const NKWA_BASE_URL = process.env.NKWA_BASE_URL;
-const NKWA_API_KEY = process.env.API_KEY;
-
+// ========== DISBURSE PAYMENT (Send money FROM you TO user) ==========
 router.post("/payments", async (req, res) => {
     const { phone, amount } = req.body;
 
-    // Validation
     if (!phone || !amount) {
         return res.status(400).json({
             success: false,
-            error: "Phone (phoneNumber) and amount are required"
+            error: "Phone and amount are required"
         });
+    }
+
+    // Remove '237' prefix if present
+    let receiverPhone = phone.toString();
+    if (receiverPhone.startsWith('237')) {
+        receiverPhone = receiverPhone.substring(3);
     }
 
     try {
-        const response = await axios.post(
-            `${NKWA_BASE_URL}/disburse`,
-            {
-                // Note: Ensure phone includes country code (e.g., 237...)
-                phoneNumber: String(phone),
-                amount: parseInt(amount),
+        const response = await paymentClient.makeDeposit({
+            receiver: receiverPhone,
+            amount: parseInt(amount),
+            service: determineService(receiverPhone),
+            country: 'CM',
+            currency: 'XAF',
+            conversion: false,
+            customer: {
+                email: 'disbursement@example.com',
+                firstName: 'Disbursement',
+                lastName: 'User',
+                town: 'Douala',
+                region: 'Littoral',
+                country: 'CM',
+                address: 'Disbursement Address'
             },
-            {
-                headers: {
-                    // Corrected: Use X-API-Key as per the OpenAPI spec
-                    "X-API-Key": NKWA_API_KEY,
-                    "Content-Type": "application/json",
-                },
-            }
-        );
+            location: {
+                town: 'Douala',
+                region: 'Littoral',
+                country: 'CM'
+            },
+            products: [{
+                name: 'Disbursement',
+                category: 'Payment',
+                quantity: 1,
+                amount: parseInt(amount)
+            }]
+        });
 
-        // Success: The API returns a 201 status for created disbursements
-        res.status(201).json({
-            success: true,
-            data: response.data
+        const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
+
+        res.status(isSuccess ? 201 : 400).json({
+            success: isSuccess,
+            data: {
+                id: response.transaction?.pk,
+                amount: response.transaction?.amount,
+                status: response.status,
+                phoneNumber: phone
+            }
         });
 
     } catch (err) {
-        // Detailed error logging
-        const statusCode = err.response?.status || 500;
-        const errorData = err.response?.data || { message: err.message };
-
-        console.error("Nkwa disbursement failed:", errorData);
-
-        res.status(statusCode).json({
+        console.error("MeSomb disbursement failed:", err.message);
+        res.status(500).json({
             success: false,
-            error: errorData,
+            error: err.message
         });
     }
 });
 
-
-// Initialize the SDK client
-const pay = new Pay({
-    apiKeyAuth: process.env.API_KEY,
-});
-
+// ========== RECONCILE ALL PAYMENTS USING MESOMB ==========
 router.get("/reconcile-all", async (req, res) => {
     try {
         const results = { checked: 0, updated: 0, credited: 0, errors: 0 };
         const models = [UserModel, HouseOwnerModel];
 
         for (const model of models) {
-            // Find users who have at least one pending transaction
             const users = await model.find({ "paymentprscribtion.status": "pending" });
 
             for (const user of users) {
-                // We use a for...of loop to handle async/await properly
                 for (const transaction of user.paymentprscribtion || []) {
                     if (transaction.status !== "pending") continue;
                     if (!transaction.nkwaTransactionId) continue;
@@ -715,23 +487,19 @@ router.get("/reconcile-all", async (req, res) => {
                     results.checked++;
 
                     try {
-                        // Use the SDK's Get method which corresponds to GET /payments/:id
-                        const nkwaPayment = await pay.payments.get({
-                            id: transaction.nkwaTransactionId,
-                        });
+                        const mesombTransactions = await paymentClient.getTransactions([transaction.nkwaTransactionId]);
+                        const mesombPayment = mesombTransactions[0];
 
-                        // Logic: If Nkwa says it's successful but our DB says pending
-                        if (nkwaPayment.status !== transaction.status) {
+                        if (mesombPayment && mesombPayment.status !== transaction.status) {
                             const updateQuery = {
                                 $set: {
-                                    "paymentprscribtion.$.status": nkwaPayment.status,
+                                    "paymentprscribtion.$.status": mesombPayment.status,
                                     "paymentprscribtion.$.updatedAt": new Date()
                                 }
                             };
 
-                            // Financial safety check: Only credit if success and not already added
-                            if (nkwaPayment.status === "success" && transaction.added !== "added") {
-                                updateQuery.$inc = { totalBalance: nkwaPayment.amount };
+                            if (mesombPayment.status === "SUCCESS" && transaction.added !== "added") {
+                                updateQuery.$inc = { totalBalance: mesombPayment.amount || transaction.amount };
                                 updateQuery.$set["paymentprscribtion.$.added"] = "added";
                                 results.credited++;
                             }
@@ -743,7 +511,6 @@ router.get("/reconcile-all", async (req, res) => {
                             results.updated++;
                         }
                     } catch (err) {
-                        // Log specific ID failure so you can investigate
                         console.error(`Reconcile failed for ID ${transaction.nkwaTransactionId}:`, err.message);
                         results.errors++;
                     }
@@ -762,18 +529,13 @@ router.get("/reconcile-all", async (req, res) => {
     }
 });
 
-
+// ========== GET ALL TRANSACTIONS FROM DATABASE ==========
 router.get("/all-transactions", async (req, res) => {
     try {
         const fetchFromModel = async (Model, roleLabel) => {
             return await Model.aggregate([
-                // 1. Only look at documents that actually have transactions
                 { $match: { "paymentprscribtion.0": { $exists: true } } },
-
-                // 2. Flatten the array so each transaction is its own document
                 { $unwind: "$paymentprscribtion" },
-
-                // 3. Shape the output
                 {
                     $project: {
                         _id: 0,
@@ -790,13 +552,11 @@ router.get("/all-transactions", async (req, res) => {
             ]);
         };
 
-        // Run both queries in parallel
         const [userTransactions, ownerTransactions] = await Promise.all([
             fetchFromModel(UserModel, "User"),
             fetchFromModel(HouseOwnerModel, "HouseOwner")
         ]);
 
-        // Combine and sort by date (newest first)
         const allTransactions = [...userTransactions, ...ownerTransactions].sort(
             (a, b) => new Date(b.date) - new Date(a.date)
         );
@@ -812,17 +572,14 @@ router.get("/all-transactions", async (req, res) => {
     }
 });
 
-
-
+// ========== GET ALL USERS ==========
 router.get("/allusers", async (req, res) => {
     try {
-        // Fetch both collections simultaneously
         const [users, owners] = await Promise.all([
-            UserModel.find({}).select("-password"), // Exclude passwords for security
+            UserModel.find({}).select("-password"),
             HouseOwnerModel.find({}).select("-password")
         ]);
 
-        // Tag each user with their role/category so the frontend can distinguish them
         const formattedUsers = users.map(u => ({
             ...u._doc,
             category: "Seeker",
@@ -835,7 +592,6 @@ router.get("/allusers", async (req, res) => {
             role: "owner"
         }));
 
-        // Combine into one master list
         const allPlatformUsers = [...formattedUsers, ...formattedOwners];
 
         res.status(200).json({
@@ -855,23 +611,7 @@ router.get("/allusers", async (req, res) => {
     }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// ========== GET ALL USERS (ALTERNATIVE) ==========
 router.get("/all-users", async (req, res) => {
     try {
         const [users, owners] = await Promise.all([
@@ -879,7 +619,6 @@ router.get("/all-users", async (req, res) => {
             HouseOwnerModel.find({}).select("-password"),
         ]);
 
-        // Combine and tag them so the frontend knows which collection they belong to
         const combined = [
             ...users.map((u) => ({ ...u._doc, collectionType: "user" })),
             ...owners.map((o) => ({ ...o._doc, collectionType: "houseowner" })),
@@ -895,56 +634,11 @@ router.get("/all-users", async (req, res) => {
     }
 });
 
-/**
- * @route   PATCH /api/admin/update-status/:id
- * @desc    Update account status and reason for a user or owner
- */
-// router.patch("/update-status/:id", async (req, res) => {
-//     const { id } = req.params;
-//     const { accountstatus, reason, collectionType } = req.body;
-
-//     // Validate input
-//     if (!["active", "suspended", "ban", "deactivated", "review"].includes(accountstatus)) {
-//         return res.status(400).json({ message: "Invalid status value" });
-//     }
-
-//     try {
-//         let updatedUser;
-
-//         // Check the specific collection based on the hint from frontend
-//         if (collectionType === "houseowner") {
-//             updatedUser = await HouseOwnerModel.findByIdAndUpdate(
-//                 id,
-//                 { $set: { accountstatus, reason } },
-//                 { new: true }
-//             );
-//         } else {
-//             updatedUser = await UserModel.findByIdAndUpdate(
-//                 id,
-//                 { $set: { accountstatus, reason } },
-//                 { new: true }
-//             );
-//         }
-
-//         if (!updatedUser) {
-//             return res.status(404).json({ message: "User not found in the database" });
-//         }
-
-//         res.status(200).json({
-//             success: true,
-//             message: `Account set to ${accountstatus}`,
-//             data: updatedUser,
-//         });
-//     } catch (error) {
-//         res.status(500).json({ success: false, message: error.message });
-//     }
-// });
-
+// ========== UPDATE USER STATUS ==========
 router.patch("/update-status/:id", async (req, res) => {
     const { id } = req.params;
     const { accountstatus, reason, collectionType } = req.body;
 
-    // 1. Rigorous Validation
     const validStatuses = ["active", "suspended", "ban", "deactivated", "review"];
     if (!validStatuses.includes(accountstatus)) {
         return res.status(400).json({
@@ -956,11 +650,8 @@ router.patch("/update-status/:id", async (req, res) => {
     try {
         let updatedUser = null;
 
-        // Debugging log to see what's hitting the server
         console.log(`[Admin Action] Updating ID: ${id} | Collection: ${collectionType} | Status: ${accountstatus}`);
 
-        // 2. Flexible Collection Check
-        // We check for "houseowner" or "owner" to prevent 404s from frontend naming mismatches
         const isOwner = collectionType === "houseowner" || collectionType === "owner";
 
         if (isOwner) {
@@ -977,16 +668,14 @@ router.patch("/update-status/:id", async (req, res) => {
             );
         }
 
-        // 3. Precise Error Handling
         if (!updatedUser) {
-            console.error(`[Error] User with ID ${id} not found in ${isOwner ? 'HouseOwner' : 'User'} collection`);
+            console.error(`[Error] User with ID ${id} not found`);
             return res.status(404).json({
                 success: false,
-                message: `Account not found in the ${isOwner ? 'House Owner' : 'Seeker'} database.`
+                message: `Account not found in the database.`
             });
         }
 
-        // 4. Success Response
         console.log(`[Success] ${updatedUser.email} is now ${accountstatus}`);
         res.status(200).json({
             success: true,
@@ -999,6 +688,43 @@ router.patch("/update-status/:id", async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Internal Server Error: " + error.message
+        });
+    }
+});
+
+// ========== WEBHOOK FOR MESOMB PAYMENT CONFIRMATIONS ==========
+router.post("/webhook/mesomb", async (req, res) => {
+    try {
+        const webhookData = req.body;
+        console.log("Webhook received:", webhookData);
+
+        // Process webhook and update transaction status
+        const { transaction_id, status, amount, reference } = webhookData;
+
+        // Find and update the transaction in your database
+        // This depends on how you store your transactions
+
+        res.status(200).json({ received: true });
+    } catch (error) {
+        console.error("Webhook error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ========== TEST MESOMB CONNECTION ==========
+router.get("/test-mesomb", async (req, res) => {
+    try {
+        const status = await paymentClient.getStatus();
+        res.json({
+            success: true,
+            message: "MeSomb connection successful",
+            status: status
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "MeSomb connection failed",
+            error: error.message
         });
     }
 });
