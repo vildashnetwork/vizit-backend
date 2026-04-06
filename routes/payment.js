@@ -23,10 +23,10 @@ let paymentClient = null;
 let meSombInitialized = false;
 
 try {
-    if (process.env.MESOMB_APPLICATION_KEY && 
-        process.env.MESOMB_ACCESS_KEY && 
+    if (process.env.MESOMB_APPLICATION_KEY &&
+        process.env.MESOMB_ACCESS_KEY &&
         process.env.MESOMB_SECRET_KEY) {
-        
+
         paymentClient = new PaymentOperation({
             applicationKey: process.env.MESOMB_APPLICATION_KEY,
             accessKey: process.env.MESOMB_ACCESS_KEY,
@@ -150,36 +150,36 @@ router.post("/pay", async (req, res) => {
 
     // Validate inputs
     if (!phoneNumber || !amount || !id || !role) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             success: false,
-            message: "Missing required fields: phoneNumber, amount, id, role" 
+            message: "Missing required fields: phoneNumber, amount, id, role"
         });
     }
 
     if (!validateCameroonPhone(phoneNumber)) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             success: false,
-            message: "Invalid phone number. Use format: 6XXXXXXXX or 2376XXXXXXXX" 
+            message: "Invalid phone number. Use format: 6XXXXXXXX or 2376XXXXXXXX"
         });
     }
 
     const amountNum = Number(amount);
     if (amountNum < 50) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             success: false,
-            message: "Minimum payment is 50 FCFA" 
+            message: "Minimum payment is 50 FCFA"
         });
     }
 
     if (amountNum > 500000) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             success: false,
-            message: "Maximum payment is 500,000 FCFA" 
+            message: "Maximum payment is 500,000 FCFA"
         });
     }
 
     if (!meSombInitialized || !paymentClient) {
-        return res.status(503).json({ 
+        return res.status(503).json({
             success: false,
             message: "Payment system not configured. Please contact support.",
             solution: "Check MeSomb credentials in environment variables"
@@ -189,11 +189,11 @@ router.post("/pay", async (req, res) => {
     try {
         const Model = role === "owner" ? HouseOwnerModel : UserModel;
         const userExists = await Model.findById(id);
-        
+
         if (!userExists) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 success: false,
-                message: "User not found" 
+                message: "User not found"
             });
         }
 
@@ -203,7 +203,7 @@ router.post("/pay", async (req, res) => {
 
         console.log(`💰 Processing: ${amountNum} XAF from ${formattedPhone} (${service})`);
 
-        // Retry logic for network issues (same as working server)
+        // Retry logic for network issues
         let response;
         let retries = 3;
         let lastError;
@@ -212,11 +212,11 @@ router.post("/pay", async (req, res) => {
             try {
                 console.log(`Attempting payment (${retries} retries left)...`);
 
-                // Create a promise with timeout
                 const timeoutPromise = new Promise((_, reject) => {
                     setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000);
                 });
 
+                // FIXED: Use camelCase field names (firstName, lastName) instead of snake_case (first_name, last_name)
                 const paymentPromise = paymentClient.makeCollect({
                     payer: formattedPhone,
                     amount: amountNum,
@@ -227,8 +227,8 @@ router.post("/pay", async (req, res) => {
                     conversion: false,
                     customer: {
                         email: userExists.email || `${formattedPhone}@user.com`,
-                        first_name: userExists.name?.split(' ')[0] || 'User',
-                        last_name: userExists.name?.split(' ')[1] || 'Customer',
+                        firstName: userExists.name?.split(' ')[0] || 'User',      // ← FIXED: firstName (camelCase)
+                        lastName: userExists.name?.split(' ')[1] || 'Customer',   // ← FIXED: lastName (camelCase)
                         town: userExists.town || 'Douala',
                         region: userExists.region || 'Littoral',
                         country: 'CM',
@@ -248,7 +248,7 @@ router.post("/pay", async (req, res) => {
                 });
 
                 response = await Promise.race([paymentPromise, timeoutPromise]);
-                break; // Success, exit retry loop
+                break;
 
             } catch (error) {
                 lastError = error;
@@ -269,10 +269,10 @@ router.post("/pay", async (req, res) => {
         console.log("MeSomb response received");
 
         const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
-        
+
         if (!isSuccess) {
             let errorMessage = response.message || "Transaction failed";
-            
+
             if (errorMessage.includes("does not know the recipient")) {
                 errorMessage = "Your merchant account is not properly configured. Please contact MeSomb support to activate your account for receiving payments.";
             } else if (errorMessage.includes("insufficient")) {
@@ -280,7 +280,7 @@ router.post("/pay", async (req, res) => {
             } else if (errorMessage.includes("timeout")) {
                 errorMessage = "Payment request timed out. Please try again.";
             }
-            
+
             return res.status(400).json({
                 success: false,
                 message: errorMessage,
@@ -327,10 +327,10 @@ router.post("/pay", async (req, res) => {
 
     } catch (err) {
         console.error("❌ Payment error:", err);
-        
+
         let errorMessage = err.message;
         let statusCode = 500;
-        
+
         if (errorMessage.includes("does not know the recipient")) {
             errorMessage = "Merchant account not configured. Please contact MeSomb support.";
             statusCode = 400;
@@ -338,7 +338,7 @@ router.post("/pay", async (req, res) => {
             errorMessage = "Network error: Cannot connect to payment service. Please try again.";
             statusCode = 503;
         }
-        
+
         return res.status(statusCode).json({
             success: false,
             message: "Payment process failed",
@@ -480,7 +480,7 @@ router.post("/pay-offline", async (req, res) => {
 router.get("/reconcile-payments", async (req, res) => {
     try {
         console.log('🔄 Starting reconciliation...');
-        
+
         const results = { checked: 0, updated: 0, credited: 0, errors: 0 };
         const models = [UserModel, HouseOwnerModel];
 
@@ -490,7 +490,7 @@ router.get("/reconcile-payments", async (req, res) => {
             for (const user of users) {
                 for (let i = 0; i < user.paymentprscribtion.length; i++) {
                     const transaction = user.paymentprscribtion[i];
-                    
+
                     if (transaction.status !== "pending") continue;
                     if (!transaction.nkwaTransactionId) continue;
 
@@ -529,7 +529,7 @@ router.get("/reconcile-payments", async (req, res) => {
                 }
             }
         }
-        
+
         res.status(200).json({ success: true, message: "Reconciliation complete", results });
     } catch (error) {
         console.error("Reconciliation error:", error);
@@ -588,22 +588,22 @@ router.post("/credit-user/:email", async (req, res) => {
 router.get("/user/me/:email", async (req, res) => {
     try {
         const { email } = req.params;
-        
+
         let user = await UserModel.findOne({ email });
         let role = 'user';
-        
+
         if (!user) {
             user = await HouseOwnerModel.findOne({ email });
             role = 'owner';
         }
-        
+
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
-        
+
         const userData = user.toObject();
         delete userData.password;
-        
+
         res.status(200).json({ success: true, user: { ...userData, role: role } });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
