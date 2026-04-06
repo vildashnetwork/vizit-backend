@@ -1,4 +1,3 @@
-// paymentRoutes.js - Refactored from NKWA to MeSomb
 import express from "express";
 import dotenv from "dotenv";
 import UserModel from "../models/Users.js";
@@ -17,76 +16,99 @@ const paymentClient = new PaymentOperation({
     language: 'en'
 });
 
-// Helper function to generate transaction ID
+// Helper function to generate unique transaction ID
 function generateTransactionId(prefix = 'txn') {
     return `${prefix}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 }
 
 // Helper function to validate Cameroon phone number
 function validateCameroonPhone(phoneNumber) {
-    return /^2376\d{8}$/.test(phoneNumber);
+    // Remove any spaces or special characters
+    const cleanPhone = phoneNumber.toString().replace(/\D/g, '');
+    // Check if it's a valid Cameroon number (6XXXXXXXX or 2376XXXXXXXX)
+    const phoneRegex = /^(237)?[6][0-9]{8}$/;
+    return phoneRegex.test(cleanPhone);
 }
 
-// ========== COLLECT PAYMENT (User pays you) ==========
+function formatPhoneNumber(phoneNumber) {
+    // Remove any non-digit characters
+    let clean = phoneNumber.toString().replace(/\D/g, '');
+    // Remove 237 prefix if present (Cameroon country code)
+    if (clean.startsWith('237')) {
+        clean = clean.substring(3);
+    }
+    return clean;
+}
+
+// ========== PAYMENT ENDPOINT (COLLECT MONEY FROM USER) ==========
 router.post("/pay", async (req, res) => {
     const { phoneNumber, amount, description, role, id } = req.body;
 
     // ── Validate inputs ──
-    if (!phoneNumber || !amount || !id || !role)
+    if (!phoneNumber || !amount || !id || !role) {
         return res.status(400).json({ message: "Missing required fields" });
+    }
 
-    if (!validateCameroonPhone(phoneNumber))
-        return res.status(400).json({ message: "Invalid phone number. Use format: 2376XXXXXXXX" });
+    if (!validateCameroonPhone(phoneNumber)) {
+        return res.status(400).json({ message: "Invalid phone number. Use format: 6XXXXXXXX or 2376XXXXXXXX" });
+    }
 
-    if (Number(amount) < 50)
+    if (Number(amount) < 50) {
         return res.status(400).json({ message: "Minimum payment is 50 FCFA" });
+    }
 
     try {
         const Model = role === "owner" ? HouseOwnerModel : UserModel;
 
         // ── Verify user exists before calling MeSomb ──
         const userExists = await Model.findById(id);
-        if (!userExists)
+        if (!userExists) {
             return res.status(404).json({ message: "User not found" });
-
-        // Remove '237' prefix if present (MeSomb expects just the number without country code)
-        let payerPhone = phoneNumber;
-        if (payerPhone.startsWith('237')) {
-            payerPhone = payerPhone.substring(3);
         }
+
+        const formattedPhone = formatPhoneNumber(phoneNumber);
+        const transactionId = generateTransactionId('pay');
 
         console.log("→ MeSomb collect request:", {
             amount: Number(amount),
-            payer: payerPhone,
-            service: determineService(payerPhone)
+            phoneNumber: formattedPhone,
+            transactionId
         });
 
-        // ── Call MeSomb makeCollect ──
+        // Determine service based on phone number prefix (Cameroon)
+        let service = 'MTN'; // Default
+        if (formattedPhone.startsWith('65') || formattedPhone.startsWith('67')) {
+            service = 'ORANGE';
+        } else if (formattedPhone.startsWith('68')) {
+            service = 'AIRTEL';
+        }
+
+        // ── Call MeSomb to collect money from user ──
         const response = await paymentClient.makeCollect({
-            payer: payerPhone,
+            payer: formattedPhone,
             amount: Number(amount),
-            service: determineService(payerPhone),
+            service: service,
             country: 'CM',
             currency: 'XAF',
             fees: true,
             conversion: false,
             customer: {
-                email: userExists.email || `${id}@user.com`,
-                firstName: userExists.name?.split(' ')[0] || 'User',
-                lastName: userExists.name?.split(' ')[1] || 'Customer',
-                town: 'Douala',
-                region: 'Littoral',
+                email: userExists.email || `${formattedPhone}@user.com`,
+                first_name: userExists.name?.split(' ')[0] || 'User',
+                last_name: userExists.name?.split(' ')[1] || formattedPhone,
+                town: userExists.town || 'Douala',
+                region: userExists.region || 'Littoral',
                 country: 'CM',
-                address: 'Customer Address'
+                address: userExists.address || 'User Address'
             },
             location: {
-                town: 'Douala',
-                region: 'Littoral',
+                town: userExists.town || 'Douala',
+                region: userExists.region || 'Littoral',
                 country: 'CM'
             },
             products: [{
                 name: description || 'Payment Collection',
-                category: 'Service',
+                category: 'Payment',
                 quantity: 1,
                 amount: Number(amount)
             }]
@@ -98,28 +120,43 @@ router.post("/pay", async (req, res) => {
 
         if (!isSuccess) {
             return res.status(500).json({
-                message: "MeSomb did not return a successful transaction",
-                error: response.message
+                message: "Payment failed",
+                error: response.message || "Transaction failed"
             });
         }
 
-        // ── Save transaction with same structure as NKWA ──
-        const transaction = {
-            nkwaTransactionId: response.transaction?.pk || generateTransactionId('mesomb'), // Keep field name for compatibility
-            internalRef: response.transaction?.reference || generateTransactionId('ref'),
-            merchantId: process.env.MESOMB_APPLICATION_KEY?.substring(0, 20),
-            amount: response.transaction?.amount || Number(amount),
+        const mesombData = {
+            id: response.transaction?.pk || transactionId,
+            internalRef: response.transaction?.reference || transactionId,
+            merchantId: response.application,
+            amount: response.transaction?.amount || amount,
             currency: response.transaction?.currency || 'XAF',
             fee: response.transaction?.fees || 0,
             merchantPaidFee: false,
-            phoneNumber: phoneNumber,
-            telecomOperator: determineService(payerPhone),
+            phoneNumber: formattedPhone,
+            telecomOperator: service,
             status: response.status || "pending",
             paymentType: "collection",
-            description: description || "",
+            description: description || "Payment collection"
+        };
+
+        // ── Save transaction to user's paymentprscribtion array ──
+        const transaction = {
+            nkwaTransactionId: mesombData.id,  // Keep same field name for compatibility
+            internalRef: mesombData.internalRef,
+            merchantId: mesombData.merchantId,
+            amount: mesombData.amount,
+            currency: mesombData.currency,
+            fee: mesombData.fee,
+            merchantPaidFee: mesombData.merchantPaidFee,
+            phoneNumber: mesombData.phoneNumber,
+            telecomOperator: mesombData.telecomOperator,
+            status: "pending", // MeSomb transactions start as pending
             added: "notadded",
+            paymentType: mesombData.paymentType,
+            description: mesombData.description,
             createdAt: new Date(),
-            mesombResponse: response // Store full response for debugging
+            updatedAt: new Date()
         };
 
         await Model.findByIdAndUpdate(
@@ -130,7 +167,7 @@ router.post("/pay", async (req, res) => {
 
         return res.status(201).json({
             message: "Payment initiated successfully",
-            transaction
+            transaction: transaction
         });
 
     } catch (err) {
@@ -146,19 +183,6 @@ router.post("/pay", async (req, res) => {
     }
 });
 
-// Helper to determine service provider based on phone number prefix
-function determineService(phoneNumber) {
-    const phone = phoneNumber.toString();
-    if (phone.startsWith('6') || phone.startsWith('65') || phone.startsWith('67')) {
-        return 'MTN';
-    } else if (phone.startsWith('69')) {
-        return 'ORANGE';
-    } else if (phone.startsWith('68')) {
-        return 'AIRTEL';
-    }
-    return 'MTN'; // Default
-}
-
 // ========== RECONCILE ALL PENDING PAYMENTS ==========
 router.get("/reconcile-payments", async (req, res) => {
     try {
@@ -171,26 +195,27 @@ router.get("/reconcile-payments", async (req, res) => {
             for (const user of users) {
                 for (const transaction of user.paymentprscribtion || []) {
                     if (transaction.status !== "pending") continue;
+                    if (!transaction.nkwaTransactionId) continue;
 
                     results.checked++;
 
                     try {
                         // Get transaction status from MeSomb
-                        const mesombStatus = await paymentClient.getTransactions([transaction.nkwaTransactionId]);
-                        const paymentStatus = mesombStatus[0];
+                        const mesombTransactions = await paymentClient.getTransactions([transaction.nkwaTransactionId]);
+                        const mesombPayment = mesombTransactions[0];
 
-                        if (paymentStatus && paymentStatus.status !== transaction.status) {
+                        if (mesombPayment && mesombPayment.status !== transaction.status) {
                             const updateQuery = {
                                 $set: {
-                                    "paymentprscribtion.$.status": paymentStatus.status,
+                                    "paymentprscribtion.$.status": mesombPayment.status,
                                     "paymentprscribtion.$.updatedAt": new Date(),
-                                    "paymentprscribtion.$.rawResponse": paymentStatus
+                                    "paymentprscribtion.$.rawResponse": mesombPayment
                                 }
                             };
 
                             // ONLY credit if it's a new success AND hasn't been added yet
-                            if (paymentStatus.status === "SUCCESS" && transaction.added === "notadded") {
-                                updateQuery.$inc = { totalBalance: paymentStatus.amount || transaction.amount };
+                            if (mesombPayment.status === "SUCCESS" && transaction.added === "notadded") {
+                                updateQuery.$inc = { totalBalance: mesombPayment.amount };
                                 updateQuery.$set["paymentprscribtion.$.added"] = "added";
                                 updateQuery.$set["paymentprscribtion.$.verifiedAt"] = new Date();
                                 results.credited++;
@@ -215,27 +240,58 @@ router.get("/reconcile-payments", async (req, res) => {
     }
 });
 
-// ========== FETCH ALL TRANSACTIONS FROM MESOMB ==========
-router.get("/mesomb/all-transactions", async (req, res) => {
+// ========== FETCH ALL TRANSACTIONS FROM ME SOMB ==========
+router.get("/nkwa/all-transactions", async (req, res) => {
     try {
         const { page = 1, limit = 50 } = req.query;
 
-        // Get application status and recent transactions
-        const status = await paymentClient.getStatus();
+        // Note: MeSomb doesn't have a direct get all transactions endpoint
+        // We need to get transactions from our database instead
+        const models = [UserModel, HouseOwnerModel];
+        let allTransactions = [];
 
-        // Note: MeSomb doesn't have a direct "get all transactions" endpoint
-        // You need to query by specific IDs or use webhooks
-        // This returns application status instead
+        for (const model of models) {
+            const users = await model.find({ "paymentprscribtion.0": { $exists: true } });
+
+            for (const user of users) {
+                for (const transaction of user.paymentprscribtion || []) {
+                    allTransactions.push({
+                        id: transaction.nkwaTransactionId,
+                        amount: transaction.amount,
+                        status: transaction.status,
+                        phoneNumber: transaction.phoneNumber,
+                        telecomOperator: transaction.telecomOperator,
+                        description: transaction.description,
+                        createdAt: transaction.createdAt,
+                        updatedAt: transaction.updatedAt
+                    });
+                }
+            }
+        }
+
+        // Paginate results
+        const start = (Number(page) - 1) * Number(limit);
+        const paginatedTransactions = allTransactions.slice(start, start + Number(limit));
+
         return res.status(200).json({
-            message: "Application status fetched",
-            data: status,
-            note: "For transaction history, please check your MeSomb dashboard or implement webhooks"
+            message: "Transactions fetched successfully",
+            count: paginatedTransactions.length,
+            total: allTransactions.length,
+            data: {
+                data: paginatedTransactions,
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    total: allTransactions.length,
+                    pages: Math.ceil(allTransactions.length / Number(limit))
+                }
+            }
         });
 
     } catch (error) {
-        console.error("Fetch MeSomb transactions error:", error.message);
+        console.error("Fetch transactions error:", error.message);
         return res.status(500).json({
-            message: "Failed to fetch MeSomb data",
+            message: "Failed to fetch transactions",
             error: error.message
         });
     }
@@ -292,7 +348,7 @@ router.post("/credit-user/:email", async (req, res) => {
     }
 });
 
-// ========== ACTIVATE VERIFICATION FOR HOUSE OWNERS ==========
+// ========== ACTIVATE VERIFICATION (HOUSE OWNER) ==========
 router.post("/activate-verification/:email", async (req, res) => {
     try {
         const { months } = req.body;
@@ -344,7 +400,7 @@ router.post("/activate-verification/:email", async (req, res) => {
     }
 });
 
-// ========== SUBSCRIBE TO VIEW PROPERTIES ==========
+// ========== SUBSCRIBE TO VIEW (USERS) ==========
 router.post("/subscribe-to-view", async (req, res) => {
     const { userId, months } = req.body;
     const PRICE_PER_MONTH = 50;
@@ -379,13 +435,14 @@ router.post("/subscribe-to-view", async (req, res) => {
         user.paytoviewenddate = newEndDate;
 
         user.paymentprscribtion.push({
+            nkwaTransactionId: generateTransactionId('sub'),
             amount: totalCost,
             status: "SUCCESS",
+            added: "added",
             description: `Purchased ${numMonths} month(s) view access`,
             paymentType: "disbursement",
             verifiedAt: now,
-            added: "added",
-            nkwaTransactionId: generateTransactionId('sub') // Keep field name
+            createdAt: now
         });
 
         await user.save();
@@ -402,7 +459,7 @@ router.post("/subscribe-to-view", async (req, res) => {
     }
 });
 
-// ========== DISBURSE PAYMENT (Send money FROM you TO user) ==========
+// ========== DISBURSE MONEY TO USER (WITHDRAWAL) ==========
 router.post("/payments", async (req, res) => {
     const { phone, amount } = req.body;
 
@@ -413,28 +470,38 @@ router.post("/payments", async (req, res) => {
         });
     }
 
-    // Remove '237' prefix if present
-    let receiverPhone = phone.toString();
-    if (receiverPhone.startsWith('237')) {
-        receiverPhone = receiverPhone.substring(3);
+    if (!validateCameroonPhone(phone)) {
+        return res.status(400).json({
+            success: false,
+            error: "Invalid phone number format"
+        });
     }
 
     try {
+        const formattedPhone = formatPhoneNumber(phone);
+
+        let service = 'MTN';
+        if (formattedPhone.startsWith('65') || formattedPhone.startsWith('67')) {
+            service = 'ORANGE';
+        } else if (formattedPhone.startsWith('68')) {
+            service = 'AIRTEL';
+        }
+
         const response = await paymentClient.makeDeposit({
-            receiver: receiverPhone,
-            amount: parseInt(amount),
-            service: determineService(receiverPhone),
+            receiver: formattedPhone,
+            amount: Number(amount),
+            service: service,
             country: 'CM',
             currency: 'XAF',
             conversion: false,
             customer: {
-                email: 'disbursement@example.com',
-                firstName: 'Disbursement',
-                lastName: 'User',
+                email: `user_${formattedPhone}@example.com`,
+                first_name: 'User',
+                last_name: formattedPhone,
                 town: 'Douala',
                 region: 'Littoral',
                 country: 'CM',
-                address: 'Disbursement Address'
+                address: 'User Address'
             },
             location: {
                 town: 'Douala',
@@ -442,22 +509,29 @@ router.post("/payments", async (req, res) => {
                 country: 'CM'
             },
             products: [{
-                name: 'Disbursement',
-                category: 'Payment',
+                name: 'Withdrawal',
+                category: 'Cashout',
                 quantity: 1,
-                amount: parseInt(amount)
+                amount: Number(amount)
             }]
         });
 
         const isSuccess = response.isOperationSuccess ? response.isOperationSuccess() : false;
 
-        res.status(isSuccess ? 201 : 400).json({
-            success: isSuccess,
+        if (!isSuccess) {
+            return res.status(500).json({
+                success: false,
+                error: response.message || "Disbursement failed"
+            });
+        }
+
+        res.status(201).json({
+            success: true,
             data: {
                 id: response.transaction?.pk,
-                amount: response.transaction?.amount,
-                status: response.status,
-                phoneNumber: phone
+                amount: amount,
+                phoneNumber: formattedPhone,
+                status: response.status
             }
         });
 
@@ -470,7 +544,7 @@ router.post("/payments", async (req, res) => {
     }
 });
 
-// ========== RECONCILE ALL PAYMENTS USING MESOMB ==========
+// ========== RECONCILE ALL (USING ME SOMB) ==========
 router.get("/reconcile-all", async (req, res) => {
     try {
         const results = { checked: 0, updated: 0, credited: 0, errors: 0 };
@@ -499,7 +573,7 @@ router.get("/reconcile-all", async (req, res) => {
                             };
 
                             if (mesombPayment.status === "SUCCESS" && transaction.added !== "added") {
-                                updateQuery.$inc = { totalBalance: mesombPayment.amount || transaction.amount };
+                                updateQuery.$inc = { totalBalance: mesombPayment.amount };
                                 updateQuery.$set["paymentprscribtion.$.added"] = "added";
                                 results.credited++;
                             }
@@ -546,7 +620,9 @@ router.get("/all-transactions", async (req, res) => {
                         date: "$paymentprscribtion.createdAt",
                         ownerName: "$name",
                         ownerRole: roleLabel,
-                        ownerId: "$_id"
+                        ownerId: "$_id",
+                        phoneNumber: "$paymentprscribtion.phoneNumber",
+                        description: "$paymentprscribtion.description"
                     }
                 }
             ]);
@@ -688,43 +764,6 @@ router.patch("/update-status/:id", async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Internal Server Error: " + error.message
-        });
-    }
-});
-
-// ========== WEBHOOK FOR MESOMB PAYMENT CONFIRMATIONS ==========
-router.post("/webhook/mesomb", async (req, res) => {
-    try {
-        const webhookData = req.body;
-        console.log("Webhook received:", webhookData);
-
-        // Process webhook and update transaction status
-        const { transaction_id, status, amount, reference } = webhookData;
-
-        // Find and update the transaction in your database
-        // This depends on how you store your transactions
-
-        res.status(200).json({ received: true });
-    } catch (error) {
-        console.error("Webhook error:", error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// ========== TEST MESOMB CONNECTION ==========
-router.get("/test-mesomb", async (req, res) => {
-    try {
-        const status = await paymentClient.getStatus();
-        res.json({
-            success: true,
-            message: "MeSomb connection successful",
-            status: status
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: "MeSomb connection failed",
-            error: error.message
         });
     }
 });
