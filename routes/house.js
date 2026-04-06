@@ -1,8 +1,283 @@
 import express from "express";
 import HouseModel from "../models/HousePosts.js";
 import mongoose from "mongoose";
-
+import HouseOwnerModel from "../models/HouseOwners.js";
+import axios from "axios"
 const router = express.Router();
+
+
+
+const AI_PROVIDERS = [
+    {
+        name: 'Gemini',
+        key: process.env.AI_KEY_1,
+        baseURL: process.env.AI_BASE_1,
+        model: process.env.AI_MODEL_1,
+        headers: (key) => ({
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+        })
+    },
+    {
+        name: 'OpenRouter',
+        key: process.env.AI_KEY_2,
+        baseURL: process.env.AI_BASE_2,
+        model: process.env.AI_MODEL_2,
+        headers: (key) => ({
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+        })
+    },
+    {
+        name: 'Cerebras',
+        key: process.env.AI_API_KEY_3,
+        baseURL: process.env.AI_BASE_URL_3,
+        model: process.env.AI_MODEL_3,
+        headers: (key) => ({
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+        })
+    },
+    {
+        name: 'Mistral',
+        key: process.env.AI_API_KEY_4,
+        baseURL: process.env.AI_BASE_URL_4,
+        model: process.env.AI_MODEL_4,
+        headers: (key) => ({
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+        })
+    },
+    {
+        name: 'Groq',
+        key: process.env.AI_API_KEY,
+        baseURL: process.env.AI_BASE_URL,
+        model: process.env.AI_MODEL,
+        headers: (key) => ({
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+        })
+    }
+];
+
+/**
+ * Call AI with fallback mechanism
+ */
+async function callAIFallback(prompt, retryCount = 0) {
+    for (let i = 0; i < AI_PROVIDERS.length; i++) {
+        const provider = AI_PROVIDERS[i];
+        try {
+            console.log(`Attempting with provider: ${provider.name} (Attempt ${retryCount + 1})`);
+
+            const response = await axios.post(
+                `${provider.baseURL}/chat/completions`,
+                {
+                    model: provider.model,
+                    messages: [
+                        {
+                            role: "system",
+                            content: "You are an AI that analyzes and sorts reviews. Return only valid JSON without any markdown formatting or additional text."
+                        },
+                        {
+                            role: "user",
+                            content: prompt
+                        }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 2000
+                },
+                {
+                    headers: provider.headers(provider.key),
+                    timeout: 15000
+                }
+            );
+
+            if (response.data?.choices?.[0]?.message?.content) {
+                let content = response.data.choices[0].message.content;
+                // Clean up markdown if present
+                content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                const parsed = JSON.parse(content);
+                console.log(`Successfully used provider: ${provider.name}`);
+                return parsed;
+            }
+        } catch (error) {
+            console.error(`Provider ${provider.name} failed:`, error.message);
+            continue;
+        }
+    }
+
+    // If all providers fail and we haven't retried too many times
+    if (retryCount < 2) {
+        console.log(`All providers failed, retrying (${retryCount + 1}/2)...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return callAIFallback(prompt, retryCount + 1);
+    }
+
+    throw new Error("All AI providers failed to respond");
+}
+
+/**
+ * AI-powered review sorting for verified houses
+ */
+async function sortReviewsWithAI(reviews, houseTitle, houseLocation, ownerName = '') {
+    if (!reviews || reviews.length === 0) return reviews;
+
+    const prompt = `
+    Analyze and sort these property reviews. Return ONLY valid JSON.
+    
+    Property: "${houseTitle}" located in "${houseLocation}"
+    ${ownerName ? `Owner: ${ownerName}` : ''}
+    
+    Reviews:
+    ${JSON.stringify(reviews.map((r, i) => ({
+        id: i,
+        rating: r.rating,
+        text: r.comment || r.text || '',
+        date: r.createdAt || r.date,
+        helpfulCount: r.helpful || 0
+    })), null, 2)}
+    
+    Sort criteria (in order of importance):
+    1. High-quality reviews (4-5 stars with detailed, helpful comments about the property)
+    2. Recent reviews (prioritize last 30 days)
+    3. Reviews marked as helpful by other users
+    4. Reviews with specific details about amenities, location, neighborhood, or landlord responsiveness
+    5. Lower priority: Vague comments (e.g., "good", "nice"), negative reviews without constructive feedback
+    
+    Return JSON format:
+    {
+        "sortedIndices": [0, 2, 1, 3, ...],
+        "reasoning": "brief explanation of sorting logic"
+    }
+    `;
+
+    try {
+        const result = await callAIFallback(prompt);
+        if (result && Array.isArray(result.sortedIndices)) {
+            // Validate indices are within bounds
+            const validIndices = result.sortedIndices.filter(i => i >= 0 && i < reviews.length);
+            if (validIndices.length === reviews.length) {
+                return validIndices.map(i => reviews[i]);
+            }
+        }
+        // Fallback to manual sorting if AI returns invalid data
+        console.log("AI returned invalid indices, using manual sort");
+        return manualReviewSort(reviews);
+    } catch (error) {
+        console.error("AI review sorting failed, using manual sort:", error);
+        return manualReviewSort(reviews);
+    }
+}
+
+/**
+ * Manual review sorting (fallback when AI fails)
+ */
+function manualReviewSort(reviews) {
+    return [...reviews].sort((a, b) => {
+        // Sort by rating (higher first)
+        if (a.rating !== b.rating) {
+            return (b.rating || 0) - (a.rating || 0);
+        }
+        // Then by helpful count (higher first)
+        if ((a.helpful || 0) !== (b.helpful || 0)) {
+            return (b.helpful || 0) - (a.helpful || 0);
+        }
+        // Then by date (newer first)
+        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+        return dateB - dateA;
+    });
+}
+
+/**
+ * Get owner details for multiple houses
+ */
+async function getOwnerDetails(ownerIds) {
+    const uniqueOwnerIds = [...new Set(ownerIds.filter(id => id))];
+    const owners = await HouseOwnerModel.find({
+        _id: { $in: uniqueOwnerIds }
+    }).select('_id name email isVerified phone');
+
+    const ownerMap = {};
+    owners.forEach(owner => {
+        ownerMap[owner._id.toString()] = owner;
+    });
+
+    return ownerMap;
+}
+
+/**
+ * Get all houses (disabled = false) with AI-sorted reviews for verified properties
+ */
+router.get("/houses", async (req, res) => {
+    try {
+        // Fetch only enabled houses
+        const houses = await HouseModel.find({ disable: false }).sort({ createdAt: -1 });
+
+        if (!houses || houses.length === 0) {
+            return res.status(200).json({ houses: [] });
+        }
+
+        // Collect all owner IDs to fetch their verification status
+        const ownerIds = houses.map(house => house.ownerId).filter(id => id);
+        const ownerMap = await getOwnerDetails(ownerIds);
+
+        // Process each house to sort reviews using AI for verified houses
+        const processedHouses = await Promise.all(
+            houses.map(async (house) => {
+                const houseObj = house.toObject();
+                const owner = ownerMap[house.ownerId?.toString()];
+
+                // Only apply AI sorting if house has reviews and owner is verified
+                if (houseObj.reviews && houseObj.reviews.length > 0 && owner?.isVerified === true) {
+                    try {
+                        console.log(`AI sorting reviews for verified house: ${houseObj.title} (${house._id})`);
+                        const sortedReviews = await sortReviewsWithAI(
+                            houseObj.reviews,
+                            houseObj.title,
+                            houseObj.location?.address || houseObj.location || 'Unknown location',
+                            owner?.name || ''
+                        );
+                        houseObj.reviews = sortedReviews;
+                        houseObj.reviewsAISorted = true;
+                    } catch (error) {
+                        console.error(`AI sorting failed for house ${house._id}:`, error);
+                        // Keep original reviews but mark as manually sorted
+                        houseObj.reviews = manualReviewSort(houseObj.reviews);
+                        houseObj.reviewsAISorted = false;
+                    }
+                } else if (houseObj.reviews && houseObj.reviews.length > 0) {
+                    // For non-verified owners or houses without owner, use manual sorting
+                    houseObj.reviews = manualReviewSort(houseObj.reviews);
+                    houseObj.reviewsAISorted = false;
+                }
+
+                // Add owner verification status to response
+                if (owner) {
+                    houseObj.ownerVerified = owner.isVerified || false;
+                    houseObj.ownerName = owner.name;
+                    houseObj.ownerEmail = owner.email;
+                }
+
+                return houseObj;
+            })
+        );
+
+        res.status(200).json({
+            houses: processedHouses,
+            total: processedHouses.length,
+            aiEnabled: true
+        });
+    } catch (err) {
+        console.error("Get houses error:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+
+
 
 /**
  * Create a new house post
@@ -433,15 +708,15 @@ router.delete("/houses/:id", async (req, res) => {
  * 
  * gBLzrqc4qFBXXD0i homesvizit_db_user
  */
-router.get("/houses", async (req, res) => {
-    try {
-        const houses = await HouseModel.find({ disable: false }).sort({ createdAt: -1 });
-        res.status(200).json({ houses });
-    } catch (err) {
-        console.error("Get houses error:", err);
-        res.status(500).json({ message: "Internal server error" });
-    }
-});
+// router.get("/houses", async (req, res) => {
+//     try {
+//         const houses = await HouseModel.find({ disable: false }).sort({ createdAt: -1 });
+//         res.status(200).json({ houses });
+//     } catch (err) {
+//         console.error("Get houses error:", err);
+//         res.status(500).json({ message: "Internal server error" });
+//     }
+// });
 
 /**
  * Get a single house by ID
