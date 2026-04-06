@@ -593,10 +593,10 @@ router.get("/test-network", async (req, res) => {
 
 router.post("/pay", async (req, res) => {
     try {
-        const { phone, amount, service, userId, userRole, email } = req.body;
+        const { phoneNumber, amount, service, userId, userRole, email } = req.body;
 
         console.log('\n📱 User wants to deposit money:');
-        console.log(`  User Phone: ${phone}`);
+        console.log(`  User Phone: ${phoneNumber}`);
         console.log(`  Amount: ${amount} XAF`);
         console.log(`  Service: ${service}`);
         console.log(`  User ID: ${userId}`);
@@ -606,7 +606,7 @@ router.post("/pay", async (req, res) => {
         if (!phone || !amount || !service) {
             return res.status(400).json({
                 success: false,
-                message: 'Missing required fields: phone, amount, service'
+                message: 'Missing required fields: phoneNumber, amount, service'
             });
         }
 
@@ -664,7 +664,7 @@ router.post("/pay", async (req, res) => {
                 });
 
                 const paymentPromise = paymentClient.makeCollect({
-                    payer: phone,
+                    payer: phoneNumber,
                     amount: amountNum,
                     service: service.toUpperCase(),
                     country: 'CM',
@@ -726,7 +726,7 @@ router.post("/pay", async (req, res) => {
 
         // ========== CREATE TRANSACTION RECORD MATCHING YOUR SCHEMA ==========
         const transactionId = generateTransactionId('pay');
-        const formattedPhone = formatPhoneNumber(phone);
+        const formattedPhone = formatPhoneNumber(phoneNumber);
 
         // Convert service to lowercase for enum validation (mtn or orange)
         const telecomOperator = service.toLowerCase();
