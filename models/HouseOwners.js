@@ -217,7 +217,7 @@ const houseOwnerSchema = new mongoose.Schema(
 
     totalBalance: {
       type: Number,
-      default: 0
+      default: 5000
     },
 
     allChatsId: {
