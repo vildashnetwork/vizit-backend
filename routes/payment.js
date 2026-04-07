@@ -1320,7 +1320,7 @@ router.get("/all-transactions", async (req, res) => {
 });
 
 // ========== GET ALL USERS (ADMIN) ==========
-router.get("/all-users", async (req, res) => {
+router.get("/allusers", async (req, res) => {
     try {
         const [users, owners] = await Promise.all([
             UserModel.find({}).select("-password"),
